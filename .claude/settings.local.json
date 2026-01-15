@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 10 uvicorn:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill -9)",
+      "Bash(docker-compose up:*)",
+      "Bash(./venv/bin/python:*)",
+      "Bash(./venv/bin/pip install:*)",
+      "Bash(./venv/bin/pip uninstall:*)",
+      "Bash(alembic revision:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(pkill:*)",
+      "Bash(./venv/bin/pip show:*)",
+      "Bash(git init:*)"
+    ]
+  }
+}

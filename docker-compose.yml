@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: biometria_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-biometria}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-biometria_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-biometria_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-biometria} -d ${POSTGRES_DB:-biometria_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: biometria_api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-biometria}:${POSTGRES_PASSWORD:-biometria_secret}@db:5432/${POSTGRES_DB:-biometria_db}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
