@@ -23,7 +23,7 @@ import { Location } from '../../../../core/models/location.model';
           <a routerLink="/admin/dashboard" class="back-link">← Dashboard</a>
           <h1>Empleados</h1>
         </div>
-        <button class="btn btn-primary" (click)="showModal.set(true)">
+        <button class="btn btn-primary" (click)="openCreateModal()">
           + Nuevo Empleado
         </button>
       </header>
@@ -62,15 +62,24 @@ import { Location } from '../../../../core/models/location.model';
                 <td>
                   <div class="actions">
                     <button
+                      class="btn btn-sm btn-edit"
+                      (click)="editEmployee(employee)"
+                      title="Editar"
+                    >
+                      ✏️
+                    </button>
+                    <button
                       class="btn btn-sm"
                       (click)="registerFace(employee)"
                       [disabled]="employee.has_face_registered"
+                      title="Registrar rostro"
                     >
                       📷
                     </button>
                     <button
                       class="btn btn-sm btn-danger"
                       (click)="deleteEmployee(employee)"
+                      title="Eliminar"
                     >
                       🗑️
                     </button>
@@ -82,16 +91,16 @@ import { Location } from '../../../../core/models/location.model';
         </table>
       </div>
 
-      <!-- Create modal -->
+      <!-- Create/Edit modal -->
       @if (showModal()) {
-        <div class="modal-overlay" (click)="showModal.set(false)">
+        <div class="modal-overlay" (click)="closeModal()">
           <div class="modal" (click)="$event.stopPropagation()">
-            <h2>Nuevo Empleado</h2>
-            <form (ngSubmit)="createEmployee()">
+            <h2>{{ editMode() ? 'Editar Empleado' : 'Nuevo Empleado' }}</h2>
+            <form (ngSubmit)="saveEmployee()">
               <div class="form-row">
                 <div class="form-group">
                   <label>Código de Empleado *</label>
-                  <input [(ngModel)]="newEmployee.employee_code" name="code" required />
+                  <input [(ngModel)]="newEmployee.employee_code" name="code" required [disabled]="editMode()" />
                 </div>
                 <div class="form-group">
                   <label>Email *</label>
@@ -144,10 +153,12 @@ import { Location } from '../../../../core/models/location.model';
                 </div>
               </div>
               <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" (click)="showModal.set(false)">
+                <button type="button" class="btn btn-secondary" (click)="closeModal()">
                   Cancelar
                 </button>
-                <button type="submit" class="btn btn-primary">Crear</button>
+                <button type="submit" class="btn btn-primary">
+                  {{ editMode() ? 'Guardar' : 'Crear' }}
+                </button>
               </div>
             </form>
           </div>
@@ -231,6 +242,8 @@ import { Location } from '../../../../core/models/location.model';
     .btn-secondary { background: #e5e7eb; color: #374151; }
     .btn-success { background: #22c55e; color: white; }
     .btn-danger { background: #ef4444; color: white; }
+    .btn-edit { background: #f59e0b; color: white; }
+    .btn-edit:hover { background: #d97706; }
     .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.875rem; }
 
     .table-container {
@@ -360,6 +373,8 @@ export class EmployeesComponent implements OnInit {
   readonly locations = signal<Location[]>([]);
 
   readonly showModal = signal(false);
+  readonly editMode = signal(false);
+  readonly editingEmployeeId = signal<string | null>(null);
   readonly showFaceModal = signal(false);
   readonly selectedEmployee = signal<Employee | null>(null);
   readonly capturedImages = signal<string[]>([]);
@@ -414,15 +429,77 @@ export class EmployeesComponent implements OnInit {
     return loc?.name || '-';
   }
 
-  createEmployee(): void {
+  openCreateModal(): void {
+    this.editMode.set(false);
+    this.editingEmployeeId.set(null);
+    this.resetForm();
+    this.showModal.set(true);
+  }
+
+  editEmployee(employee: Employee): void {
+    this.editMode.set(true);
+    this.editingEmployeeId.set(employee.id);
+    this.newEmployee = {
+      employee_code: employee.employee_code,
+      first_name: employee.first_name,
+      last_name: employee.last_name,
+      email: employee.email,
+      phone: employee.phone || '',
+      department_id: employee.department_id,
+      position_id: employee.position_id,
+      location_id: employee.location_id,
+    };
+    this.showModal.set(true);
+  }
+
+  closeModal(): void {
+    this.showModal.set(false);
+    this.editMode.set(false);
+    this.editingEmployeeId.set(null);
+    this.resetForm();
+  }
+
+  saveEmployee(): void {
+    if (this.editMode()) {
+      this.updateEmployee();
+    } else {
+      this.createEmployee();
+    }
+  }
+
+  private createEmployee(): void {
     this.employeeService.create(this.newEmployee).subscribe({
       next: () => {
-        this.showModal.set(false);
-        this.resetForm();
+        this.closeModal();
         this.loadData();
       },
       error: (err) => {
         alert(err.error?.detail || 'Error al crear empleado');
+      },
+    });
+  }
+
+  private updateEmployee(): void {
+    const id = this.editingEmployeeId();
+    if (!id) return;
+
+    const updateData = {
+      first_name: this.newEmployee.first_name,
+      last_name: this.newEmployee.last_name,
+      email: this.newEmployee.email,
+      phone: this.newEmployee.phone || undefined,
+      department_id: this.newEmployee.department_id,
+      position_id: this.newEmployee.position_id,
+      location_id: this.newEmployee.location_id,
+    };
+
+    this.employeeService.update(id, updateData).subscribe({
+      next: () => {
+        this.closeModal();
+        this.loadData();
+      },
+      error: (err) => {
+        alert(err.error?.detail || 'Error al actualizar empleado');
       },
     });
   }
