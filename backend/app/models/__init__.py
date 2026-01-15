@@ -8,6 +8,10 @@ from app.models.settings import Settings
 from app.models.position import Position
 from app.models.department import Department
 from app.models.location import Location
+from app.models.leave_balance import (
+    LeavePolicy, LeaveBalance, LeaveTransaction,
+    LeaveUnit, AccrualType, TransactionType
+)
 
 __all__ = [
     "User",
@@ -24,4 +28,11 @@ __all__ = [
     "Position",
     "Department",
     "Location",
+    # Leave Balance
+    "LeavePolicy",
+    "LeaveBalance",
+    "LeaveTransaction",
+    "LeaveUnit",
+    "AccrualType",
+    "TransactionType",
 ]
