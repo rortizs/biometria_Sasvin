@@ -62,6 +62,16 @@ import { Employee } from '../../../../core/models/employee.model';
           <h3>Asistencia</h3>
           <p>Ver registros de asistencia</p>
         </a>
+        <a routerLink="/admin/locations" class="nav-card">
+          <div class="nav-icon">📍</div>
+          <h3>Sedes</h3>
+          <p>Gestionar ubicaciones y geolocalización</p>
+        </a>
+        <a routerLink="/admin/settings" class="nav-card">
+          <div class="nav-icon">⚙️</div>
+          <h3>Configuración</h3>
+          <p>Ajustes de la institución</p>
+        </a>
       </nav>
 
       <!-- Today's attendance -->

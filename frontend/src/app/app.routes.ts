@@ -53,6 +53,20 @@ export const routes: Routes = [
             (m) => m.AttendanceComponent
           ),
       },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./features/admin/pages/settings/settings.component').then(
+            (m) => m.SettingsComponent
+          ),
+      },
+      {
+        path: 'locations',
+        loadComponent: () =>
+          import('./features/admin/pages/locations/locations.component').then(
+            (m) => m.LocationsComponent
+          ),
+      },
     ],
   },
   {

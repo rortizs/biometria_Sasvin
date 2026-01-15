@@ -2,8 +2,15 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { EmployeeService } from '../../../../core/services/employee.service';
+import { PositionService } from '../../../../core/services/position.service';
+import { DepartmentService } from '../../../../core/services/department.service';
+import { LocationService } from '../../../../core/services/location.service';
 import { Employee, EmployeeCreate } from '../../../../core/models/employee.model';
+import { Position } from '../../../../core/models/position.model';
+import { Department } from '../../../../core/models/department.model';
+import { Location } from '../../../../core/models/location.model';
 
 @Component({
   selector: 'app-employees',
@@ -28,8 +35,10 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
             <tr>
               <th>Código</th>
               <th>Nombre</th>
+              <th>Email</th>
               <th>Departamento</th>
               <th>Puesto</th>
+              <th>Sede</th>
               <th>Rostro</th>
               <th>Acciones</th>
             </tr>
@@ -39,8 +48,10 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
               <tr>
                 <td>{{ employee.employee_code }}</td>
                 <td>{{ employee.first_name }} {{ employee.last_name }}</td>
-                <td>{{ employee.department || '-' }}</td>
-                <td>{{ employee.position || '-' }}</td>
+                <td>{{ employee.email }}</td>
+                <td>{{ getDepartmentName(employee.department_id) }}</td>
+                <td>{{ getPositionName(employee.position_id) }}</td>
+                <td>{{ getLocationName(employee.location_id) }}</td>
                 <td>
                   @if (employee.has_face_registered) {
                     <span class="badge success">Registrado</span>
@@ -55,7 +66,7 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
                       (click)="registerFace(employee)"
                       [disabled]="employee.has_face_registered"
                     >
-                      📷 Registrar Rostro
+                      📷
                     </button>
                     <button
                       class="btn btn-sm btn-danger"
@@ -79,34 +90,53 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
             <form (ngSubmit)="createEmployee()">
               <div class="form-row">
                 <div class="form-group">
-                  <label>Código de Empleado</label>
+                  <label>Código de Empleado *</label>
                   <input [(ngModel)]="newEmployee.employee_code" name="code" required />
+                </div>
+                <div class="form-group">
+                  <label>Email *</label>
+                  <input type="email" [(ngModel)]="newEmployee.email" name="email" required />
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>Nombre</label>
+                  <label>Nombre *</label>
                   <input [(ngModel)]="newEmployee.first_name" name="firstName" required />
                 </div>
                 <div class="form-group">
-                  <label>Apellido</label>
+                  <label>Apellido *</label>
                   <input [(ngModel)]="newEmployee.last_name" name="lastName" required />
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
                   <label>Departamento</label>
-                  <input [(ngModel)]="newEmployee.department" name="department" />
+                  <select [(ngModel)]="newEmployee.department_id" name="department">
+                    <option [ngValue]="null">-- Seleccionar --</option>
+                    @for (dept of departments(); track dept.id) {
+                      <option [ngValue]="dept.id">{{ dept.name }}</option>
+                    }
+                  </select>
                 </div>
                 <div class="form-group">
                   <label>Puesto</label>
-                  <input [(ngModel)]="newEmployee.position" name="position" />
+                  <select [(ngModel)]="newEmployee.position_id" name="position">
+                    <option [ngValue]="null">-- Seleccionar --</option>
+                    @for (pos of positions(); track pos.id) {
+                      <option [ngValue]="pos.id">{{ pos.name }}</option>
+                    }
+                  </select>
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>Email</label>
-                  <input type="email" [(ngModel)]="newEmployee.email" name="email" />
+                  <label>Sede</label>
+                  <select [(ngModel)]="newEmployee.location_id" name="location">
+                    <option [ngValue]="null">-- Seleccionar --</option>
+                    @for (loc of locations(); track loc.id) {
+                      <option [ngValue]="loc.id">{{ loc.name }}</option>
+                    }
+                  </select>
                 </div>
                 <div class="form-group">
                   <label>Teléfono</label>
@@ -196,73 +226,29 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
       transition: all 0.2s;
     }
 
-    .btn-primary {
-      background: #3b82f6;
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: #2563eb;
-    }
-
-    .btn-secondary {
-      background: #e5e7eb;
-      color: #374151;
-    }
-
-    .btn-success {
-      background: #22c55e;
-      color: white;
-    }
-
-    .btn-danger {
-      background: #ef4444;
-      color: white;
-    }
-
-    .btn-sm {
-      padding: 0.375rem 0.75rem;
-      font-size: 0.875rem;
-    }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .btn-success { background: #22c55e; color: white; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.875rem; }
 
     .table-container {
       background: white;
       border-radius: 1rem;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      overflow: hidden;
+      overflow-x: auto;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 1rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; font-weight: 600; color: #374151; }
 
-    th, td {
-      padding: 1rem;
-      text-align: left;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    th {
-      background: #f9fafb;
-      font-weight: 600;
-      color: #374151;
-    }
-
-    .badge {
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 500;
-    }
-
+    .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
     .badge.success { background: #dcfce7; color: #166534; }
     .badge.warning { background: #fef3c7; color: #92400e; }
 
-    .actions {
-      display: flex;
-      gap: 0.5rem;
-    }
+    .actions { display: flex; gap: 0.5rem; }
 
     .modal-overlay {
       position: fixed;
@@ -279,15 +265,12 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
       padding: 2rem;
       border-radius: 1rem;
       width: 100%;
-      max-width: 500px;
+      max-width: 550px;
       max-height: 90vh;
       overflow-y: auto;
     }
 
-    .modal h2 {
-      margin-bottom: 1.5rem;
-      color: #1f2937;
-    }
+    .modal h2 { margin-bottom: 1.5rem; color: #1f2937; }
 
     .form-row {
       display: grid;
@@ -307,14 +290,16 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
       color: #374151;
     }
 
-    .form-group input {
+    .form-group input,
+    .form-group select {
       padding: 0.625rem;
       border: 2px solid #e5e7eb;
       border-radius: 0.5rem;
       font-size: 1rem;
     }
 
-    .form-group input:focus {
+    .form-group input:focus,
+    .form-group select:focus {
       outline: none;
       border-color: #3b82f6;
     }
@@ -326,9 +311,7 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
       margin-top: 1.5rem;
     }
 
-    .face-modal {
-      max-width: 600px;
-    }
+    .face-modal { max-width: 600px; }
 
     .camera-container {
       background: #000;
@@ -367,8 +350,15 @@ import { Employee, EmployeeCreate } from '../../../../core/models/employee.model
 })
 export class EmployeesComponent implements OnInit {
   private readonly employeeService = inject(EmployeeService);
+  private readonly positionService = inject(PositionService);
+  private readonly departmentService = inject(DepartmentService);
+  private readonly locationService = inject(LocationService);
 
   readonly employees = signal<Employee[]>([]);
+  readonly positions = signal<Position[]>([]);
+  readonly departments = signal<Department[]>([]);
+  readonly locations = signal<Location[]>([]);
+
   readonly showModal = signal(false);
   readonly showFaceModal = signal(false);
   readonly selectedEmployee = signal<Employee | null>(null);
@@ -383,18 +373,45 @@ export class EmployeesComponent implements OnInit {
     last_name: '',
     email: '',
     phone: '',
-    department: '',
-    position: '',
+    department_id: null,
+    position_id: null,
+    location_id: null,
   };
 
   ngOnInit(): void {
-    this.loadEmployees();
+    this.loadData();
   }
 
-  loadEmployees(): void {
-    this.employeeService.getAll({ active_only: false }).subscribe((employees) => {
+  loadData(): void {
+    forkJoin({
+      employees: this.employeeService.getAll({ active_only: false }),
+      positions: this.positionService.getPositions(),
+      departments: this.departmentService.getDepartments(),
+      locations: this.locationService.getLocations(),
+    }).subscribe(({ employees, positions, departments, locations }) => {
       this.employees.set(employees);
+      this.positions.set(positions);
+      this.departments.set(departments);
+      this.locations.set(locations);
     });
+  }
+
+  getDepartmentName(id: string | null): string {
+    if (!id) return '-';
+    const dept = this.departments().find(d => d.id === id);
+    return dept?.name || '-';
+  }
+
+  getPositionName(id: string | null): string {
+    if (!id) return '-';
+    const pos = this.positions().find(p => p.id === id);
+    return pos?.name || '-';
+  }
+
+  getLocationName(id: string | null): string {
+    if (!id) return '-';
+    const loc = this.locations().find(l => l.id === id);
+    return loc?.name || '-';
   }
 
   createEmployee(): void {
@@ -402,7 +419,7 @@ export class EmployeesComponent implements OnInit {
       next: () => {
         this.showModal.set(false);
         this.resetForm();
-        this.loadEmployees();
+        this.loadData();
       },
       error: (err) => {
         alert(err.error?.detail || 'Error al crear empleado');
@@ -413,7 +430,7 @@ export class EmployeesComponent implements OnInit {
   deleteEmployee(employee: Employee): void {
     if (confirm(`¿Eliminar a ${employee.first_name} ${employee.last_name}?`)) {
       this.employeeService.delete(employee.id).subscribe(() => {
-        this.loadEmployees();
+        this.loadData();
       });
     }
   }
@@ -422,7 +439,6 @@ export class EmployeesComponent implements OnInit {
     this.selectedEmployee.set(employee);
     this.capturedImages.set([]);
     this.showFaceModal.set(true);
-
     await this.startCamera();
   }
 
@@ -456,7 +472,6 @@ export class EmployeesComponent implements OnInit {
 
     ctx.drawImage(this.videoElement, 0, 0);
     const image = canvas.toDataURL('image/jpeg', 0.8);
-
     this.capturedImages.update((images) => [...images, image]);
   }
 
@@ -470,7 +485,7 @@ export class EmployeesComponent implements OnInit {
         next: () => {
           alert('Rostro registrado exitosamente');
           this.closeFaceModal();
-          this.loadEmployees();
+          this.loadData();
         },
         error: (err) => {
           alert(err.error?.detail || 'Error al registrar rostro');
@@ -495,8 +510,9 @@ export class EmployeesComponent implements OnInit {
       last_name: '',
       email: '',
       phone: '',
-      department: '',
-      position: '',
+      department_id: null,
+      position_id: null,
+      location_id: null,
     };
   }
 }
