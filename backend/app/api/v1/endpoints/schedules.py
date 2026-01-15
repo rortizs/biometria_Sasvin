@@ -179,8 +179,31 @@ async def create_bulk_assignments(
     created_count = 0
     updated_count = 0
 
+    # Get schedule_id from either field
+    schedule_id = bulk_in.schedule_id or bulk_in.schedule_pattern_id
+
+    # Generate list of dates
+    assignment_dates: list[date] = []
+
+    if bulk_in.dates:
+        # Option 1: Use explicit dates list
+        assignment_dates = bulk_in.dates
+    elif bulk_in.start_date and bulk_in.end_date:
+        # Option 2: Generate dates from range
+        current_date = bulk_in.start_date
+        while current_date <= bulk_in.end_date:
+            # Filter by days_of_week if provided
+            if bulk_in.days_of_week is None or current_date.weekday() in bulk_in.days_of_week:
+                assignment_dates.append(current_date)
+            current_date += timedelta(days=1)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Must provide either 'dates' list or 'start_date' and 'end_date'"
+        )
+
     for emp_id in bulk_in.employee_ids:
-        for assignment_date in bulk_in.dates:
+        for assignment_date in assignment_dates:
             result = await db.execute(
                 select(ScheduleAssignment).where(
                     and_(
@@ -192,14 +215,14 @@ async def create_bulk_assignments(
             existing = result.scalar_one_or_none()
 
             if existing:
-                existing.schedule_id = bulk_in.schedule_id
+                existing.schedule_id = schedule_id
                 existing.is_day_off = bulk_in.is_day_off
                 updated_count += 1
             else:
                 assignment = ScheduleAssignment(
                     employee_id=emp_id,
                     assignment_date=assignment_date,
-                    schedule_id=bulk_in.schedule_id,
+                    schedule_id=schedule_id,
                     is_day_off=bulk_in.is_day_off,
                     created_by=current_user.id
                 )
