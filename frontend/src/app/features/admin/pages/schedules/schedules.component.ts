@@ -2,7 +2,7 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { forkJoin, catchError, of } from 'rxjs';
 import { ScheduleService } from '../../../../core/services/schedule.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { DepartmentService } from '../../../../core/services/department.service';
@@ -49,6 +49,9 @@ interface WeekDay {
           </button>
           <button class="btn btn-outline" (click)="showPatternModal.set(true)">
             <span class="btn-icon">&#9998;</span> Patrones
+          </button>
+          <button class="btn btn-warning" (click)="openNewException()">
+            <span class="btn-icon">&#128197;</span> Nueva Solicitud
           </button>
           <button class="btn btn-primary" (click)="refresh()">
             <span class="btn-icon">&#8635;</span> Refrescar
@@ -373,25 +376,56 @@ interface WeekDay {
       <!-- Exception Modal -->
       @if (showExceptionModal()) {
         <div class="modal-overlay" (click)="closeExceptionModal()">
-          <div class="modal" (click)="$event.stopPropagation()">
+          <div class="modal modal-lg" (click)="$event.stopPropagation()">
             <div class="modal-header">
-              <h2>Crear Excepcion</h2>
+              <h2>{{ exceptionModalMode() === 'new' ? 'Nueva Solicitud' : 'Crear Excepcion' }}</h2>
               <button class="close-btn" (click)="closeExceptionModal()">&#10005;</button>
             </div>
             <div class="modal-body">
-              <p class="modal-info">
-                Creando excepcion para <strong>{{ selectedEmployees().length }}</strong> empleado(s)
-              </p>
+              @if (exceptionModalMode() === 'new') {
+                <!-- Employee selector when creating new exception from header -->
+                <div class="form-group full-width" style="margin-bottom: 1rem;">
+                  <label for="exceptionEmployee">Empleado</label>
+                  <select id="exceptionEmployee" [(ngModel)]="exceptionForm.employeeId">
+                    <option value="">Seleccione un empleado...</option>
+                    @for (emp of employees(); track emp.id) {
+                      <option [value]="emp.id">{{ emp.employee_code }} - {{ emp.first_name }} {{ emp.last_name }}</option>
+                    }
+                  </select>
+                </div>
+              } @else {
+                <p class="modal-info">
+                  Creando excepcion para <strong>{{ selectedEmployees().length }}</strong> empleado(s)
+                </p>
+              }
               <div class="form-grid">
-                <div class="form-group">
-                  <label for="exceptionType">Tipo de Excepcion</label>
-                  <select id="exceptionType" [(ngModel)]="exceptionForm.type">
-                    <option value="vacation">Vacaciones</option>
-                    <option value="sick_leave">Incapacidad</option>
-                    <option value="holiday">Feriado</option>
-                    <option value="permission">Permiso</option>
-                    <option value="day_off">Dia Libre</option>
-                    <option value="other">Otro</option>
+                <div class="form-group full-width">
+                  <label for="exceptionType">Tipo de Solicitud</label>
+                  <select id="exceptionType" [(ngModel)]="exceptionForm.type" class="exception-select">
+                    <option value="" disabled>Seleccione tipo...</option>
+                    <optgroup label="Licencias">
+                      <option value="vacation">Vacaciones</option>
+                      <option value="maternity_leave">Licencia de Maternidad</option>
+                      <option value="paternity_leave">Licencia de Paternidad</option>
+                      <option value="bereavement">Luto</option>
+                    </optgroup>
+                    <optgroup label="Permisos Medicos">
+                      <option value="sick_leave">Incapacidad Medica</option>
+                      <option value="medical_permission">Permiso Medico</option>
+                    </optgroup>
+                    <optgroup label="Otros Permisos">
+                      <option value="permission">Permiso General</option>
+                      <option value="personal_day">Dia Personal</option>
+                      <option value="compensatory">Compensatorio</option>
+                      <option value="work_letter">Carta de Trabajo</option>
+                    </optgroup>
+                    <optgroup label="Dias Especiales">
+                      <option value="holiday">Feriado</option>
+                      <option value="day_off">Dia Libre</option>
+                    </optgroup>
+                    <optgroup label="Otros">
+                      <option value="other">Otro</option>
+                    </optgroup>
                   </select>
                 </div>
                 <div class="form-group">
@@ -403,13 +437,24 @@ interface WeekDay {
                   <input id="exceptionEndDate" type="date" [(ngModel)]="exceptionForm.endDate" />
                 </div>
                 <div class="form-group full-width">
-                  <label for="exceptionDesc">Descripcion</label>
-                  <input id="exceptionDesc" type="text" [(ngModel)]="exceptionForm.description" />
+                  <label for="exceptionDesc">Descripcion / Motivo</label>
+                  <textarea
+                    id="exceptionDesc"
+                    [(ngModel)]="exceptionForm.description"
+                    rows="3"
+                    placeholder="Ingrese el motivo o descripcion de la solicitud..."
+                  ></textarea>
                 </div>
               </div>
               <div class="form-actions">
                 <button class="btn btn-outline" (click)="closeExceptionModal()">Cancelar</button>
-                <button class="btn btn-primary" (click)="saveException()">Crear</button>
+                <button
+                  class="btn btn-primary"
+                  (click)="saveException()"
+                  [disabled]="!canSaveException()"
+                >
+                  Crear Solicitud
+                </button>
               </div>
             </div>
           </div>
@@ -842,6 +887,10 @@ interface WeekDay {
       flex-direction: column;
     }
 
+    .modal.modal-lg {
+      max-width: 700px;
+    }
+
     .modal-header {
       display: flex;
       justify-content: space-between;
@@ -977,10 +1026,31 @@ interface WeekDay {
     }
 
     .form-group input:focus,
-    .form-group select:focus {
+    .form-group select:focus,
+    .form-group textarea:focus {
       outline: none;
       border-color: #6366f1;
       box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .form-group textarea {
+      padding: 0.625rem 0.75rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      color: #1f2937;
+      resize: vertical;
+      font-family: inherit;
+    }
+
+    .exception-select optgroup {
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .form-group input[type="color"] {
@@ -1093,6 +1163,7 @@ export class SchedulesComponent implements OnInit {
   readonly showAssignModal = signal(false);
   readonly showExceptionModal = signal(false);
   readonly editingPattern = signal<SchedulePattern | null>(null);
+  readonly exceptionModalMode = signal<'new' | 'bulk'>('bulk');
 
   // Filters
   filters: CalendarFilters = {
@@ -1209,10 +1280,26 @@ export class SchedulesComponent implements OnInit {
   private loadInitialData(): void {
     this.loading.set(true);
 
+    // Use catchError to handle individual failures - if one fails, others still work
     forkJoin({
-      employees: this.employeeService.getAll({ active_only: true }),
-      departments: this.departmentService.getDepartments(true),
-      patterns: this.scheduleService.getPatterns(true),
+      employees: this.employeeService.getAll({ active_only: true }).pipe(
+        catchError((err) => {
+          console.warn('Error loading employees, will use calendar data:', err);
+          return of([] as Employee[]);
+        })
+      ),
+      departments: this.departmentService.getDepartments(true).pipe(
+        catchError((err) => {
+          console.warn('Error loading departments:', err);
+          return of([] as Department[]);
+        })
+      ),
+      patterns: this.scheduleService.getPatterns(true).pipe(
+        catchError((err) => {
+          console.warn('Error loading patterns:', err);
+          return of([] as SchedulePattern[]);
+        })
+      ),
     }).subscribe({
       next: ({ employees, departments, patterns }) => {
         this.employees.set(employees);
@@ -1222,7 +1309,8 @@ export class SchedulesComponent implements OnInit {
       },
       error: (err) => {
         console.error('Error loading initial data:', err);
-        this.loading.set(false);
+        // Still try to load calendar even if initial data failed
+        this.loadCalendar();
       },
     });
   }
@@ -1233,6 +1321,28 @@ export class SchedulesComponent implements OnInit {
     this.scheduleService.getCalendar(this.filters.startDate, this.filters.endDate).subscribe({
       next: (response) => {
         this.calendar.set(response.employees);
+
+        // Fallback: if employees array is empty but calendar has employees, extract from calendar
+        if (this.employees().length === 0 && response.employees.length > 0) {
+          const employeesFromCalendar: Employee[] = response.employees.map((ce) => ({
+            id: ce.employee_id,
+            employee_code: ce.employee_code,
+            first_name: ce.first_name,
+            last_name: ce.last_name,
+            email: '',
+            phone: null,
+            hire_date: null,
+            is_active: true,
+            created_at: '',
+            has_face_registered: false,
+            department_id: null,
+            position_id: null,
+            location_id: null,
+          }));
+          this.employees.set(employeesFromCalendar);
+          console.info('Employees loaded from calendar data as fallback');
+        }
+
         this.loading.set(false);
       },
       error: (err) => {
@@ -1335,11 +1445,18 @@ export class SchedulesComponent implements OnInit {
 
   getExceptionColor(type: ExceptionType): string {
     const colors: Record<ExceptionType, string> = {
-      day_off: '#9CA3AF',
       vacation: '#1E3A5F',
-      sick_leave: '#7C3AED',
-      holiday: '#DC2626',
-      permission: '#F59E0B',
+      sick_leave: '#DC2626',
+      bereavement: '#374151',
+      medical_permission: '#7C3AED',
+      work_letter: '#0891B2',
+      compensatory: '#059669',
+      maternity_leave: '#EC4899',
+      paternity_leave: '#8B5CF6',
+      personal_day: '#F59E0B',
+      holiday: '#EF4444',
+      day_off: '#9CA3AF',
+      permission: '#F97316',
       other: '#6B7280',
     };
     return colors[type] || '#6B7280';
@@ -1463,14 +1580,43 @@ export class SchedulesComponent implements OnInit {
   }
 
   // Exception Modal
+  openNewException(): void {
+    this.exceptionModalMode.set('new');
+    this.exceptionForm = this.getEmptyExceptionForm();
+    this.showExceptionModal.set(true);
+  }
+
   closeExceptionModal(): void {
     this.showExceptionModal.set(false);
+    this.exceptionModalMode.set('bulk');
     this.exceptionForm = this.getEmptyExceptionForm();
   }
 
+  canSaveException(): boolean {
+    const hasType = !!this.exceptionForm.type;
+    const hasDates = !!this.exceptionForm.startDate && !!this.exceptionForm.endDate;
+
+    if (this.exceptionModalMode() === 'new') {
+      return hasType && hasDates && !!this.exceptionForm.employeeId;
+    }
+    return hasType && hasDates && this.selectedEmployees().length > 0;
+  }
+
   saveException(): void {
+    const mode = this.exceptionModalMode();
+
+    // Get employee IDs based on mode
+    const employeeIds = mode === 'new'
+      ? [this.exceptionForm.employeeId]
+      : this.selectedEmployees();
+
+    if (employeeIds.length === 0 || !employeeIds[0]) {
+      console.error('No employees selected');
+      return;
+    }
+
     // Create exception for each selected employee
-    const promises = this.selectedEmployees().map((employeeId) => {
+    const promises = employeeIds.map((employeeId) => {
       const exception: ScheduleExceptionCreate = {
         employee_id: employeeId,
         exception_type: this.exceptionForm.type as ExceptionType,
@@ -1484,7 +1630,9 @@ export class SchedulesComponent implements OnInit {
     Promise.all(promises)
       .then(() => {
         this.closeExceptionModal();
-        this.clearSelection();
+        if (mode === 'bulk') {
+          this.clearSelection();
+        }
         this.loadCalendar();
       })
       .catch((err) => console.error('Error creating exceptions:', err));
@@ -1567,7 +1715,8 @@ export class SchedulesComponent implements OnInit {
 
   private getEmptyExceptionForm() {
     return {
-      type: 'vacation' as string,
+      employeeId: '' as string,
+      type: '' as string,
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date().toISOString().split('T')[0],
       description: '',

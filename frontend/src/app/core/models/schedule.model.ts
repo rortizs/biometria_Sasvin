@@ -57,7 +57,21 @@ export interface BulkScheduleAssignment {
 }
 
 // Schedule Exception - Vacations, holidays, sick leave, etc.
-export type ExceptionType = 'day_off' | 'vacation' | 'sick_leave' | 'holiday' | 'permission' | 'other';
+// Extended types based on SIA system
+export type ExceptionType =
+  | 'vacation'           // Vacaciones
+  | 'sick_leave'         // Incapacidad Medica
+  | 'bereavement'        // Luto
+  | 'medical_permission' // Permiso-Medico
+  | 'work_letter'        // Carta de Trabajo
+  | 'compensatory'       // Compensatorio
+  | 'maternity_leave'    // Licencia de Maternidad
+  | 'paternity_leave'    // Licencia de Paternidad
+  | 'personal_day'       // Dia Personal
+  | 'holiday'            // Feriado
+  | 'day_off'            // Dia Libre
+  | 'permission'         // Permiso General
+  | 'other';             // Otro
 
 export interface ScheduleException {
   id: string;
@@ -116,19 +130,33 @@ export interface CalendarFilters {
 }
 
 export const EXCEPTION_TYPE_LABELS: Record<ExceptionType, string> = {
-  day_off: 'Libre',
   vacation: 'Vacaciones',
-  sick_leave: 'Incapacidad',
+  sick_leave: 'Incapacidad Medica',
+  bereavement: 'Luto',
+  medical_permission: 'Permiso Medico',
+  work_letter: 'Carta de Trabajo',
+  compensatory: 'Compensatorio',
+  maternity_leave: 'Licencia Maternidad',
+  paternity_leave: 'Licencia Paternidad',
+  personal_day: 'Dia Personal',
   holiday: 'Feriado',
+  day_off: 'Dia Libre',
   permission: 'Permiso',
   other: 'Otro',
 };
 
 export const EXCEPTION_TYPE_COLORS: Record<ExceptionType, string> = {
-  day_off: '#9CA3AF', // gray
-  vacation: '#3B82F6', // blue
-  sick_leave: '#EF4444', // red
-  holiday: '#8B5CF6', // purple
-  permission: '#F59E0B', // amber
-  other: '#6B7280', // gray
+  vacation: '#1E3A5F',       // dark blue
+  sick_leave: '#DC2626',     // red
+  bereavement: '#374151',    // dark gray
+  medical_permission: '#7C3AED', // purple
+  work_letter: '#0891B2',    // cyan
+  compensatory: '#059669',   // green
+  maternity_leave: '#EC4899', // pink
+  paternity_leave: '#8B5CF6', // violet
+  personal_day: '#F59E0B',   // amber
+  holiday: '#EF4444',        // red
+  day_off: '#9CA3AF',        // gray
+  permission: '#F97316',     // orange
+  other: '#6B7280',          // gray
 };

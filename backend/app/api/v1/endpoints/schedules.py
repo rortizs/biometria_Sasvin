@@ -310,6 +310,7 @@ async def delete_exception(
 @router.get("/calendar", response_model=CalendarResponse)
 async def get_calendar(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     start_date: date = Query(..., description="Start date of the calendar view"),
     end_date: date = Query(..., description="End date of the calendar view"),
     department_id: UUID | None = None,
