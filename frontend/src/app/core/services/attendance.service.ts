@@ -27,7 +27,10 @@ export class AttendanceService {
 
   getAttendance(params?: {
     record_date?: string;
+    date_from?: string;
+    date_to?: string;
     employee_id?: string;
+    status?: string;
     skip?: number;
     limit?: number;
   }): Observable<AttendanceRecord[]> {

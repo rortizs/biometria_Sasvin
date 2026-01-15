@@ -276,16 +276,27 @@ async def list_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     record_date: date | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     employee_id: UUID | None = None,
+    status: str | None = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[AttendanceResponse]:
     query = select(AttendanceRecord).options(selectinload(AttendanceRecord.employee))
 
+    # Single date filter (backwards compatible)
     if record_date:
         query = query.where(AttendanceRecord.record_date == record_date)
+    # Date range filter
+    if date_from:
+        query = query.where(AttendanceRecord.record_date >= date_from)
+    if date_to:
+        query = query.where(AttendanceRecord.record_date <= date_to)
     if employee_id:
         query = query.where(AttendanceRecord.employee_id == employee_id)
+    if status:
+        query = query.where(AttendanceRecord.status == status)
 
     query = query.offset(skip).limit(limit).order_by(AttendanceRecord.record_date.desc())
 
