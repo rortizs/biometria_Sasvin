@@ -4,21 +4,23 @@ import {
   OnDestroy,
   inject,
   signal,
-  computed,
   ViewChild,
   ElementRef,
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { CameraService } from '../../core/services/camera.service';
 import { AttendanceService } from '../../core/services/attendance.service';
+import { GeolocationService, GeoPosition } from '../../core/services/geolocation.service';
 import { AttendanceRecord } from '../../core/models/attendance.model';
 
 type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
+type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
 
 @Component({
   selector: 'app-kiosk',
   standalone: true,
-  imports: [CommonModule, DatePipe],
+  imports: [CommonModule, DatePipe, RouterLink],
   template: `
     <div class="kiosk-container">
       <!-- Header with clock -->
@@ -27,7 +29,20 @@ type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
           <span class="time">{{ currentTime() }}</span>
           <span class="date">{{ currentDate() }}</span>
         </div>
-        <h1 class="title">Control de Asistencia</h1>
+        <div class="header-center">
+          <h1 class="title">Control de Asistencia</h1>
+          <div class="geo-status" [class]="geoStatus()">
+            @if (geoStatus() === 'loading') {
+              <span class="geo-icon">📍</span> Obteniendo ubicación...
+            } @else if (geoStatus() === 'success') {
+              <span class="geo-icon">✓</span> Ubicación verificada
+            } @else if (geoStatus() === 'error') {
+              <span class="geo-icon">⚠</span> {{ geoError() }}
+            } @else {
+              <span class="geo-icon">📍</span> Esperando ubicación
+            }
+          </div>
+        </div>
       </header>
 
       <!-- Main content -->
@@ -57,6 +72,15 @@ type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
               {{ lastRecord()?.check_in || lastRecord()?.check_out | date: 'HH:mm' }}
             </p>
             <p class="confidence">Confianza: {{ (lastRecord()?.confidence ?? 0) * 100 | number: '1.0-0' }}%</p>
+            @if (lastRecord()?.geo_validated !== undefined) {
+              <p class="geo-info" [class.valid]="lastRecord()?.geo_validated" [class.invalid]="!lastRecord()?.geo_validated">
+                @if (lastRecord()?.geo_validated) {
+                  📍 Ubicación validada ({{ lastRecord()?.check_in_distance_meters?.toFixed(0) || lastRecord()?.check_out_distance_meters?.toFixed(0) }}m)
+                } @else {
+                  ⚠ Fuera de la sede asignada
+                }
+              </p>
+            }
           </div>
         }
 
@@ -135,9 +159,42 @@ type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
       opacity: 0.8;
     }
 
+    .header-center {
+      text-align: center;
+    }
+
     .title {
       font-size: 1.5rem;
       font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .geo-status {
+      font-size: 0.85rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .geo-status.loading {
+      background: rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
+    }
+
+    .geo-status.success {
+      background: rgba(34, 197, 94, 0.3);
+      color: #86efac;
+    }
+
+    .geo-status.error {
+      background: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+
+    .geo-icon {
+      font-size: 1rem;
     }
 
     .kiosk-main {
@@ -259,6 +316,23 @@ type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
       opacity: 0.7;
     }
 
+    .geo-info {
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.25rem;
+    }
+
+    .geo-info.valid {
+      background: rgba(34, 197, 94, 0.2);
+      color: #86efac;
+    }
+
+    .geo-info.invalid {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+    }
+
     .mode-selector {
       display: flex;
       gap: 1rem;
@@ -337,6 +411,7 @@ export class KioskComponent implements OnInit, OnDestroy {
 
   private readonly cameraService = inject(CameraService);
   private readonly attendanceService = inject(AttendanceService);
+  private readonly geolocationService = inject(GeolocationService);
 
   private clockInterval?: ReturnType<typeof setInterval>;
   private resultTimeout?: ReturnType<typeof setTimeout>;
@@ -349,8 +424,34 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly currentTime = signal(this.formatTime(new Date()));
   readonly currentDate = signal(this.formatDate(new Date()));
 
+  readonly geoStatus = signal<GeoStatus>('idle');
+  readonly geoError = signal<string>('');
+  private currentPosition: GeoPosition | null = null;
+
   ngOnInit(): void {
     this.startClock();
+    this.requestGeolocation();
+  }
+
+  private requestGeolocation(): void {
+    if (!this.geolocationService.isSupported()) {
+      this.geoError.set('Geolocalización no soportada');
+      this.geoStatus.set('error');
+      return;
+    }
+
+    this.geoStatus.set('loading');
+    this.geolocationService.getCurrentPosition().subscribe({
+      next: (position) => {
+        if (position) {
+          this.currentPosition = position;
+          this.geoStatus.set('success');
+        } else {
+          this.geoError.set('No se pudo obtener la ubicación');
+          this.geoStatus.set('error');
+        }
+      },
+    });
   }
 
   ngAfterViewInit(): void {
@@ -415,7 +516,13 @@ export class KioskComponent implements OnInit, OnDestroy {
 
     this.mode.set('scanning');
 
-    const request = { image };
+    const request: { image: string; latitude?: number; longitude?: number } = { image };
+
+    if (this.currentPosition) {
+      request.latitude = this.currentPosition.latitude;
+      request.longitude = this.currentPosition.longitude;
+    }
+
     const action$ = this.isCheckIn()
       ? this.attendanceService.checkIn(request)
       : this.attendanceService.checkOut(request);
