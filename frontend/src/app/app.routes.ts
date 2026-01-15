@@ -67,6 +67,13 @@ export const routes: Routes = [
             (m) => m.LocationsComponent
           ),
       },
+      {
+        path: 'schedules',
+        loadComponent: () =>
+          import('./features/admin/pages/schedules/schedules.component').then(
+            (m) => m.SchedulesComponent
+          ),
+      },
     ],
   },
   {

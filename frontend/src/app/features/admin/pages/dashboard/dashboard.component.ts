@@ -67,6 +67,11 @@ import { Employee } from '../../../../core/models/employee.model';
           <h3>Sedes</h3>
           <p>Gestionar ubicaciones y geolocalización</p>
         </a>
+        <a routerLink="/admin/schedules" class="nav-card">
+          <div class="nav-icon">📅</div>
+          <h3>Horarios</h3>
+          <p>Calendario y patrones de horarios</p>
+        </a>
         <a routerLink="/admin/settings" class="nav-card">
           <div class="nav-icon">⚙️</div>
           <h3>Configuración</h3>

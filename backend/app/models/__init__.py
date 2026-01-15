@@ -2,7 +2,7 @@ from app.models.user import User
 from app.models.employee import Employee
 from app.models.face_embedding import FaceEmbedding
 from app.models.attendance import AttendanceRecord
-from app.models.schedule import Schedule, EmployeeSchedule
+from app.models.schedule import Schedule, EmployeeSchedule, ScheduleAssignment, ScheduleException, ExceptionType
 from app.models.device import Device
 from app.models.settings import Settings
 from app.models.position import Position
@@ -16,6 +16,9 @@ __all__ = [
     "AttendanceRecord",
     "Schedule",
     "EmployeeSchedule",
+    "ScheduleAssignment",
+    "ScheduleException",
+    "ExceptionType",
     "Device",
     "Settings",
     "Position",
