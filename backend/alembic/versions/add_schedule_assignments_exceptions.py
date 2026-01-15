@@ -8,8 +8,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = 'add_schedule_assignments'
-down_revision = 'add_settings_positions_departments_locations'
+revision = 'b2c3d4e5f6g7'
+down_revision = 'a1b2c3d4e5f6'
 branch_labels = None
 depends_on = None
 
@@ -19,13 +19,14 @@ def upgrade() -> None:
     op.add_column('schedules', sa.Column('description', sa.String(255), nullable=True))
     op.add_column('schedules', sa.Column('color', sa.String(7), server_default='#f97316', nullable=False))
 
-    # Create exception type enum
-    exception_type_enum = postgresql.ENUM(
-        'day_off', 'vacation', 'sick_leave', 'holiday', 'permission', 'other',
-        name='exceptiontype',
-        create_type=True
-    )
-    exception_type_enum.create(op.get_bind(), checkfirst=True)
+    # Create exception type enum using raw SQL to handle IF NOT EXISTS
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE exceptiontype AS ENUM ('day_off', 'vacation', 'sick_leave', 'holiday', 'permission', 'other');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
     # Create schedule_assignments table
     op.create_table(
@@ -47,7 +48,7 @@ def upgrade() -> None:
         'schedule_exceptions',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column('employee_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('employees.id', ondelete='CASCADE'), nullable=True),
-        sa.Column('exception_type', sa.Enum('day_off', 'vacation', 'sick_leave', 'holiday', 'permission', 'other', name='exceptiontype'), nullable=False),
+        sa.Column('exception_type', postgresql.ENUM('day_off', 'vacation', 'sick_leave', 'holiday', 'permission', 'other', name='exceptiontype', create_type=False), nullable=False),
         sa.Column('start_date', sa.Date(), nullable=False),
         sa.Column('end_date', sa.Date(), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
