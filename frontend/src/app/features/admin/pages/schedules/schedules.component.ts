@@ -6,9 +6,11 @@ import { forkJoin, catchError, of } from 'rxjs';
 import { ScheduleService } from '../../../../core/services/schedule.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { DepartmentService } from '../../../../core/services/department.service';
+import { ToastService } from '../../../../core/services/toast.service';
 import {
   SchedulePattern,
   SchedulePatternCreate,
+  ScheduleAssignment,
   CalendarEmployee,
   CalendarDay,
   CalendarFilters,
@@ -223,7 +225,7 @@ interface WeekDay {
         <section class="bulk-actions">
           <span class="selected-count">{{ selectedEmployees().length }} empleado(s) seleccionado(s)</span>
           <div class="bulk-buttons">
-            <button class="btn btn-secondary" (click)="showAssignModal.set(true)">
+            <button class="btn btn-secondary" (click)="openAssignModal()">
               Asignar Horario
             </button>
             <button class="btn btn-warning" (click)="showExceptionModal.set(true)">
@@ -311,13 +313,25 @@ interface WeekDay {
         <div class="modal-overlay" (click)="closeAssignModal()">
           <div class="modal" (click)="$event.stopPropagation()">
             <div class="modal-header">
-              <h2>Asignar Horario</h2>
+              <h2>{{ existingAssignmentsCount() > 0 ? 'Editar Asignacion' : 'Asignar Horario' }}</h2>
               <button class="close-btn" (click)="closeAssignModal()">&#10005;</button>
             </div>
             <div class="modal-body">
               <p class="modal-info">
-                Asignando horario a <strong>{{ selectedEmployees().length }}</strong> empleado(s)
+                {{ existingAssignmentsCount() > 0 ? 'Editando' : 'Asignando' }} horario a <strong>{{ selectedEmployees().length }}</strong> empleado(s)
               </p>
+
+              @if (loadingAssignments()) {
+                <div class="loading-info">
+                  <span class="spinner-small"></span> Verificando asignaciones existentes...
+                </div>
+              } @else if (existingAssignmentsCount() > 0) {
+                <div class="existing-warning">
+                  <span class="warning-icon">&#9888;</span>
+                  <span>Se encontraron <strong>{{ existingAssignmentsCount() }}</strong> asignaciones existentes en este rango. Se actualizaran con los nuevos valores.</span>
+                </div>
+              }
+
               <div class="form-grid">
                 <div class="form-group">
                   <label for="assignPattern">Patron de Horario</label>
@@ -1088,6 +1102,48 @@ interface WeekDay {
       cursor: pointer;
     }
 
+    /* Loading & Warning */
+    .loading-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: #f3f4f6;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      color: #6b7280;
+      font-size: 0.875rem;
+    }
+
+    .spinner-small {
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid #e5e7eb;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .existing-warning {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      color: #92400e;
+      font-size: 0.875rem;
+      line-height: 1.4;
+    }
+
+    .warning-icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      color: #f59e0b;
+    }
+
     /* Responsive */
     @media (max-width: 1200px) {
       .filters-grid {
@@ -1148,6 +1204,7 @@ export class SchedulesComponent implements OnInit {
   private readonly scheduleService = inject(ScheduleService);
   private readonly employeeService = inject(EmployeeService);
   private readonly departmentService = inject(DepartmentService);
+  private readonly toast = inject(ToastService);
 
   // State signals
   readonly calendar = signal<CalendarEmployee[]>([]);
@@ -1164,6 +1221,8 @@ export class SchedulesComponent implements OnInit {
   readonly showExceptionModal = signal(false);
   readonly editingPattern = signal<SchedulePattern | null>(null);
   readonly exceptionModalMode = signal<'new' | 'bulk'>('bulk');
+  readonly existingAssignmentsCount = signal(0);
+  readonly loadingAssignments = signal(false);
 
   // Filters
   filters: CalendarFilters = {
@@ -1511,18 +1570,26 @@ export class SchedulesComponent implements OnInit {
     if (editing) {
       this.scheduleService.updatePattern(editing.id, data).subscribe({
         next: () => {
+          this.toast.success('Patron actualizado');
           this.loadPatterns();
           this.cancelEditPattern();
         },
-        error: (err) => console.error('Error updating pattern:', err),
+        error: (err) => {
+          console.error('Error updating pattern:', err);
+          this.toast.error('Error al actualizar el patron');
+        },
       });
     } else {
       this.scheduleService.createPattern(data).subscribe({
         next: () => {
+          this.toast.success('Patron creado exitosamente');
           this.loadPatterns();
           this.patternForm = this.getEmptyPatternForm();
         },
-        error: (err) => console.error('Error creating pattern:', err),
+        error: (err) => {
+          console.error('Error creating pattern:', err);
+          this.toast.error('Error al crear el patron');
+        },
       });
     }
   }
@@ -1530,8 +1597,14 @@ export class SchedulesComponent implements OnInit {
   deletePattern(id: string): void {
     if (confirm('Esta seguro de eliminar este patron?')) {
       this.scheduleService.deletePattern(id).subscribe({
-        next: () => this.loadPatterns(),
-        error: (err) => console.error('Error deleting pattern:', err),
+        next: () => {
+          this.toast.success('Patron eliminado');
+          this.loadPatterns();
+        },
+        error: (err) => {
+          console.error('Error deleting pattern:', err);
+          this.toast.error('Error al eliminar el patron');
+        },
       });
     }
   }
@@ -1544,9 +1617,47 @@ export class SchedulesComponent implements OnInit {
   }
 
   // Assign Modal
+  openAssignModal(): void {
+    this.assignForm = this.getEmptyAssignForm();
+    this.existingAssignmentsCount.set(0);
+    this.showAssignModal.set(true);
+    this.checkExistingAssignments();
+  }
+
   closeAssignModal(): void {
     this.showAssignModal.set(false);
+    this.existingAssignmentsCount.set(0);
     this.assignForm = this.getEmptyAssignForm();
+  }
+
+  private checkExistingAssignments(): void {
+    const employeeIds = this.selectedEmployees();
+    if (employeeIds.length === 0) return;
+
+    this.loadingAssignments.set(true);
+
+    // Check assignments for all selected employees in the date range
+    const promises = employeeIds.map((empId) =>
+      this.scheduleService
+        .getAssignments({
+          employee_id: empId,
+          date_from: this.assignForm.startDate,
+          date_to: this.assignForm.endDate,
+        })
+        .toPromise()
+    );
+
+    Promise.all(promises)
+      .then((results) => {
+        // Count total existing assignments
+        const totalCount = results.reduce((sum, assignments) => sum + (assignments?.length || 0), 0);
+        this.existingAssignmentsCount.set(totalCount);
+        this.loadingAssignments.set(false);
+      })
+      .catch((err) => {
+        console.error('Error checking existing assignments:', err);
+        this.loadingAssignments.set(false);
+      });
   }
 
   toggleWeekday(day: number): void {
@@ -1569,13 +1680,20 @@ export class SchedulesComponent implements OnInit {
     };
 
     this.scheduleService.createBulkAssignments(bulk).subscribe({
-      next: (result) => {
-        console.log('Assignments created:', result);
+      next: (result: { created: number; updated: number }) => {
+        const total = result.created + result.updated;
+        const message = result.updated > 0
+          ? `Asignaciones guardadas: ${result.created} creadas, ${result.updated} actualizadas`
+          : `${result.created} asignaciones creadas exitosamente`;
+        this.toast.success(message);
         this.closeAssignModal();
         this.clearSelection();
         this.loadCalendar();
       },
-      error: (err) => console.error('Error creating assignments:', err),
+      error: (err) => {
+        console.error('Error creating assignments:', err);
+        this.toast.error('Error al crear las asignaciones');
+      },
     });
   }
 
@@ -1629,13 +1747,18 @@ export class SchedulesComponent implements OnInit {
 
     Promise.all(promises)
       .then(() => {
+        const count = employeeIds.length;
+        this.toast.success(count > 1 ? `${count} excepciones creadas` : 'Excepcion creada exitosamente');
         this.closeExceptionModal();
         if (mode === 'bulk') {
           this.clearSelection();
         }
         this.loadCalendar();
       })
-      .catch((err) => console.error('Error creating exceptions:', err));
+      .catch((err) => {
+        console.error('Error creating exceptions:', err);
+        this.toast.error('Error al crear las excepciones');
+      });
   }
 
   // Export
