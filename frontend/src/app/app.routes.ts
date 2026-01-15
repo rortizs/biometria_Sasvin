@@ -74,6 +74,13 @@ export const routes: Routes = [
             (m) => m.SchedulesComponent
           ),
       },
+      {
+        path: 'leave-balances',
+        loadComponent: () =>
+          import('./features/admin/pages/leave-balances/leave-balances.component').then(
+            (m) => m.LeaveBalancesComponent
+          ),
+      },
     ],
   },
   {
