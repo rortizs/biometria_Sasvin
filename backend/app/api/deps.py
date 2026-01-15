@@ -61,3 +61,11 @@ async def get_current_active_admin(
             detail="Not enough permissions",
         )
     return current_user
+
+
+# Alias for any authenticated active user (no role restriction)
+async def get_current_active_user(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Returns the current authenticated active user (any role)."""
+    return current_user

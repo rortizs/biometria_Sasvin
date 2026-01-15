@@ -24,24 +24,24 @@ from app.db.base import Base
 
 class LeaveUnit(str, PyEnum):
     """Unidad de medida del saldo"""
-    DAYS = "days"           # Dias
-    HOURS = "hours"         # Horas (para compensatorios)
+    days = "days"           # Dias
+    hours = "hours"         # Horas (para compensatorios)
 
 
 class AccrualType(str, PyEnum):
     """Tipo de acumulacion del saldo"""
-    ANNUAL = "annual"           # Acumulacion anual (vacaciones)
-    FIXED = "fixed"             # Fondo fijo (incapacidad)
-    OVERTIME = "overtime"       # Por horas extra (compensatorio)
-    MANUAL = "manual"           # Asignacion manual
+    annual = "annual"           # Acumulacion anual (vacaciones)
+    fixed = "fixed"             # Fondo fijo (incapacidad)
+    overtime = "overtime"       # Por horas extra (compensatorio)
+    manual = "manual"           # Asignacion manual
 
 
 class TransactionType(str, PyEnum):
     """Tipo de transaccion"""
-    CREDIT = "credit"           # Acreditacion (suma)
-    DEBIT = "debit"             # Uso/Descuento (resta)
-    ADJUSTMENT = "adjustment"   # Ajuste manual
-    EXPIRATION = "expiration"   # Vencimiento
+    credit = "credit"           # Acreditacion (suma)
+    debit = "debit"             # Uso/Descuento (resta)
+    adjustment = "adjustment"   # Ajuste manual
+    expiration = "expiration"   # Vencimiento
 
 
 class LeavePolicy(Base):
@@ -66,10 +66,10 @@ class LeavePolicy(Base):
 
     # Configuracion
     unit: Mapped[LeaveUnit] = mapped_column(
-        Enum(LeaveUnit), nullable=False, default=LeaveUnit.DAYS
+        Enum(LeaveUnit), nullable=False, default=LeaveUnit.days
     )
     accrual_type: Mapped[AccrualType] = mapped_column(
-        Enum(AccrualType), nullable=False, default=AccrualType.ANNUAL
+        Enum(AccrualType), nullable=False, default=AccrualType.annual
     )
 
     # Cantidad base por periodo (ej: 15 dias/anio)

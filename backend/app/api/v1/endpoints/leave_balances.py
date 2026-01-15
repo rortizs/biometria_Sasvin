@@ -171,8 +171,11 @@ async def list_balances(
     emp_query = select(Employee).where(Employee.is_active == True)
 
     if search:
-        search_filter = f"%{search}%"
+        search_term = search.strip()
+        search_filter = f"%{search_term}%"
+        # Buscar por codigo exacto O por nombre/apellido parcial
         emp_query = emp_query.where(
+            (Employee.employee_code == search_term) |
             (Employee.first_name.ilike(search_filter)) |
             (Employee.last_name.ilike(search_filter)) |
             (Employee.employee_code.ilike(search_filter))

@@ -2,7 +2,6 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
 
 import { LeaveBalanceService } from '../../../../core/services/leave-balance.service';
 import { DepartmentService } from '../../../../core/services/department.service';
@@ -11,6 +10,8 @@ import { Department } from '../../../../core/models/department.model';
 import { Employee } from '../../../../core/models/employee.model';
 import {
   LeavePolicy,
+  LeavePolicyCreate,
+  LeavePolicyUpdate,
   EmployeeBalanceSummary,
   EmployeeBalanceDetail,
   LeaveTransaction,
@@ -18,6 +19,9 @@ import {
   TRANSACTION_TYPE_LABELS,
   TRANSACTION_TYPE_COLORS,
   LEAVE_UNIT_LABELS,
+  ACCRUAL_TYPE_LABELS,
+  AccrualType,
+  LeaveUnit,
 } from '../../../../core/models/leave-balance.model';
 
 @Component({
@@ -79,6 +83,14 @@ import {
           </select>
         </div>
       </div>
+
+      <!-- Warning if no policies loaded -->
+      @if (policies().length === 0 && !loading()) {
+        <div class="alert alert-warning">
+          No se cargaron las politicas de saldo. Verifique que las migraciones se ejecutaron
+          correctamente o contacte al administrador del sistema.
+        </div>
+      }
 
       <!-- Main Table -->
       <div class="table-container">
@@ -303,16 +315,54 @@ import {
       @if (showPoliciesModal()) {
         <div class="modal-overlay" (click)="closePoliciesModal()">
           <div class="modal modal-wide" (click)="$event.stopPropagation()">
-            <h2>Configuracion de Politicas de Saldo</h2>
+            <div class="modal-header-row">
+              <h2>Configuracion de Politicas de Saldo</h2>
+              <button class="btn btn-primary btn-sm" (click)="openPolicyForm()">
+                + Nueva Politica
+              </button>
+            </div>
             <div class="policies-list">
-              @for (policy of policies(); track policy.id) {
-                <div class="policy-card" [style.border-left-color]="policy.color">
+              @for (policy of allPolicies(); track policy.id) {
+                <div
+                  class="policy-card"
+                  [style.border-left-color]="policy.color"
+                  [class.inactive]="!policy.is_active"
+                >
                   <div class="policy-header">
-                    <span class="policy-name">{{ policy.name }}</span>
-                    <span class="policy-code">{{ policy.code }}</span>
+                    <div class="policy-title">
+                      <span class="policy-name">{{ policy.name }}</span>
+                      <span class="policy-code">{{ policy.code }}</span>
+                      @if (!policy.is_active) {
+                        <span class="policy-badge inactive">Inactiva</span>
+                      }
+                    </div>
+                    <div class="policy-actions">
+                      <button
+                        class="btn-icon"
+                        title="Editar"
+                        (click)="openPolicyForm(policy)"
+                      >
+                        <span class="icon">&#9998;</span>
+                      </button>
+                      <button
+                        class="btn-icon"
+                        [title]="policy.is_active ? 'Desactivar' : 'Activar'"
+                        (click)="togglePolicyActive(policy)"
+                      >
+                        <span class="icon">{{ policy.is_active ? '&#128274;' : '&#128275;' }}</span>
+                      </button>
+                      <button
+                        class="btn-icon btn-icon-danger"
+                        title="Eliminar"
+                        (click)="confirmDeletePolicy(policy)"
+                      >
+                        <span class="icon">&#128465;</span>
+                      </button>
+                    </div>
                   </div>
                   <div class="policy-details">
                     <span>Unidad: {{ getUnitLabel(policy.unit) }}</span>
+                    <span>Tipo: {{ getAccrualTypeLabel(policy.accrual_type) }}</span>
                     <span>Base: {{ policy.base_amount }} {{ getUnitLabel(policy.unit) }}</span>
                     @if (policy.increment_per_years > 0) {
                       <span>
@@ -322,13 +372,208 @@ import {
                     @if (policy.max_amount) {
                       <span>Max: {{ policy.max_amount }}</span>
                     }
+                    @if (policy.allow_carryover) {
+                      <span>Arrastre: Si{{ policy.max_carryover ? ' (max ' + policy.max_carryover + ')' : '' }}</span>
+                    }
                   </div>
+                </div>
+              } @empty {
+                <div class="empty-policies">
+                  No hay politicas configuradas. Crea una nueva politica para comenzar.
                 </div>
               }
             </div>
             <div class="modal-actions">
               <button class="btn btn-secondary" (click)="closePoliciesModal()">
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Policy Form Modal (Create/Edit) -->
+      @if (showPolicyFormModal()) {
+        <div class="modal-overlay" (click)="closePolicyForm()">
+          <div class="modal modal-wide" (click)="$event.stopPropagation()">
+            <h2>{{ editingPolicy() ? 'Editar Politica' : 'Nueva Politica' }}</h2>
+            <form (ngSubmit)="savePolicy()">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Codigo *</label>
+                  <input
+                    type="text"
+                    [(ngModel)]="policyForm.code"
+                    name="code"
+                    required
+                    placeholder="VACATION"
+                    [class.disabled]="editingPolicy()"
+                  />
+                  <small class="form-hint">Identificador unico (ej: VACATION, SICK_LEAVE)</small>
+                </div>
+                <div class="form-group">
+                  <label>Nombre *</label>
+                  <input
+                    type="text"
+                    [(ngModel)]="policyForm.name"
+                    name="name"
+                    required
+                    placeholder="Vacaciones"
+                  />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Descripcion</label>
+                <textarea
+                  [(ngModel)]="policyForm.description"
+                  name="description"
+                  rows="2"
+                  placeholder="Descripcion de la politica..."
+                ></textarea>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Unidad *</label>
+                  <select [(ngModel)]="policyForm.unit" name="unit" required>
+                    <option value="days">Dias</option>
+                    <option value="hours">Horas</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Tipo de Acumulacion *</label>
+                  <select [(ngModel)]="policyForm.accrual_type" name="accrualType" required>
+                    <option value="annual">Anual (por antiguedad)</option>
+                    <option value="fixed">Fijo (cantidad fija)</option>
+                    <option value="overtime">Horas Extra</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Cantidad Base *</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="policyForm.base_amount"
+                    name="baseAmount"
+                    required
+                    min="0"
+                    step="0.5"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Cantidad Maxima</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="policyForm.max_amount"
+                    name="maxAmount"
+                    min="0"
+                    step="0.5"
+                    placeholder="Sin limite"
+                  />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Incremento por Antiguedad</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="policyForm.increment_per_years"
+                    name="incrementPerYears"
+                    min="0"
+                    step="0.5"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>Anios para Incremento</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="policyForm.years_for_increment"
+                    name="yearsForIncrement"
+                    min="1"
+                  />
+                  <small class="form-hint">Cada cuantos anios se aplica el incremento</small>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Color</label>
+                  <div class="color-picker-row">
+                    <input
+                      type="color"
+                      [(ngModel)]="policyForm.color"
+                      name="color"
+                      class="color-input"
+                    />
+                    <span class="color-preview" [style.background]="policyForm.color">
+                      {{ policyForm.color }}
+                    </span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input
+                      type="checkbox"
+                      [(ngModel)]="policyForm.allow_carryover"
+                      name="allowCarryover"
+                    />
+                    Permitir Arrastre
+                  </label>
+                  @if (policyForm.allow_carryover) {
+                    <input
+                      type="number"
+                      [(ngModel)]="policyForm.max_carryover"
+                      name="maxCarryover"
+                      min="0"
+                      step="0.5"
+                      placeholder="Maximo a arrastrar"
+                      class="mt-half"
+                    />
+                  }
+                </div>
+              </div>
+
+              <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" (click)="closePolicyForm()">
+                  Cancelar
+                </button>
+                <button type="submit" class="btn btn-primary" [disabled]="savingPolicy()">
+                  {{ savingPolicy() ? 'Guardando...' : (editingPolicy() ? 'Actualizar' : 'Crear') }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      }
+
+      <!-- Delete Confirmation Modal -->
+      @if (showDeleteConfirmModal()) {
+        <div class="modal-overlay" (click)="closeDeleteConfirm()">
+          <div class="modal modal-small" (click)="$event.stopPropagation()">
+            <h2>Confirmar Eliminacion</h2>
+            <p class="confirm-text">
+              Estas seguro que deseas eliminar la politica
+              <strong>{{ policyToDelete()?.name }}</strong>?
+            </p>
+            <p class="warning-text">
+              Esta accion no se puede deshacer. Si hay saldos asociados a esta politica,
+              no podra ser eliminada.
+            </p>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" (click)="closeDeleteConfirm()">
+                Cancelar
+              </button>
+              <button
+                class="btn btn-danger"
+                (click)="deletePolicy()"
+                [disabled]="savingPolicy()"
+              >
+                {{ savingPolicy() ? 'Eliminando...' : 'Eliminar' }}
               </button>
             </div>
           </div>
@@ -405,6 +650,18 @@ import {
       min-height: 100vh;
       background: #f3f4f6;
       padding: 2rem;
+    }
+
+    .alert {
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .alert-warning {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      color: #92400e;
     }
 
     .header {
@@ -763,10 +1020,23 @@ import {
     }
 
     /* Policies List */
+    .modal-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .modal-header-row h2 {
+      margin: 0;
+    }
+
     .policies-list {
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
+      max-height: 400px;
+      overflow-y: auto;
     }
 
     .policy-card {
@@ -774,12 +1044,26 @@ import {
       padding: 1rem;
       border-radius: 0.5rem;
       border-left: 4px solid;
+      transition: all 0.2s;
+    }
+
+    .policy-card.inactive {
+      opacity: 0.6;
+      background: #f3f4f6;
     }
 
     .policy-header {
       display: flex;
       justify-content: space-between;
+      align-items: flex-start;
       margin-bottom: 0.5rem;
+    }
+
+    .policy-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
 
     .policy-name {
@@ -793,11 +1077,143 @@ import {
       font-family: monospace;
     }
 
+    .policy-badge {
+      font-size: 0.625rem;
+      padding: 0.125rem 0.5rem;
+      border-radius: 1rem;
+      font-weight: 500;
+    }
+
+    .policy-badge.inactive {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .policy-actions {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 0.375rem;
+      border-radius: 0.25rem;
+      transition: all 0.2s;
+      font-size: 1rem;
+    }
+
+    .btn-icon:hover {
+      background: #e5e7eb;
+    }
+
+    .btn-icon-danger:hover {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .btn-icon .icon {
+      display: block;
+      line-height: 1;
+    }
+
     .policy-details {
       display: flex;
       gap: 1rem;
       font-size: 0.875rem;
       color: #6b7280;
+      flex-wrap: wrap;
+    }
+
+    .empty-policies {
+      text-align: center;
+      padding: 2rem;
+      color: #9ca3af;
+    }
+
+    /* Form enhancements */
+    .form-hint {
+      display: block;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 0.25rem;
+    }
+
+    .color-picker-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .color-input {
+      width: 50px !important;
+      height: 40px;
+      padding: 0.25rem !important;
+      cursor: pointer;
+    }
+
+    .color-preview {
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      font-family: monospace;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      width: auto;
+    }
+
+    .mt-half {
+      margin-top: 0.5rem;
+    }
+
+    .disabled {
+      background: #f3f4f6;
+      cursor: not-allowed;
+    }
+
+    /* Modal sizes */
+    .modal-small {
+      max-width: 400px;
+    }
+
+    .confirm-text {
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+
+    .warning-text {
+      background: #fef3c7;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      color: #92400e;
+    }
+
+    .btn-danger {
+      background: #dc2626;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #b91c1c;
+    }
+
+    .btn-danger:disabled {
+      background: #f87171;
+      cursor: not-allowed;
     }
   `],
 })
@@ -818,6 +1234,14 @@ export class LeaveBalancesComponent implements OnInit {
   readonly showBulkAccrualModal = signal(false);
   readonly showPoliciesModal = signal(false);
   readonly showTransactionModal = signal(false);
+
+  // Policy CRUD State
+  readonly allPolicies = signal<LeavePolicy[]>([]);
+  readonly showPolicyFormModal = signal(false);
+  readonly showDeleteConfirmModal = signal(false);
+  readonly editingPolicy = signal<LeavePolicy | null>(null);
+  readonly policyToDelete = signal<LeavePolicy | null>(null);
+  readonly savingPolicy = signal(false);
 
   // Filters
   filters = {
@@ -845,6 +1269,9 @@ export class LeaveBalancesComponent implements OnInit {
     usage_end_date: '',
   };
 
+  // Policy form
+  policyForm = this.getEmptyPolicyForm();
+
   // Computed
   readonly availableYears = computed(() => {
     const currentYear = new Date().getFullYear();
@@ -858,20 +1285,35 @@ export class LeaveBalancesComponent implements OnInit {
   loadInitialData(): void {
     this.loading.set(true);
 
-    forkJoin({
-      policies: this.leaveBalanceService.getPolicies(),
-      departments: this.departmentService.getDepartments(),
-    }).subscribe({
-      next: ({ policies, departments }) => {
+    // Cargar politicas y departamentos de forma independiente
+    // para que si uno falla, el otro siga funcionando
+    this.leaveBalanceService.getPolicies().subscribe({
+      next: (policies) => {
         this.policies.set(policies);
-        this.departments.set(departments);
-        this.loadBalances();
+        console.log('Politicas cargadas:', policies.length);
       },
       error: (err) => {
-        console.error('Error loading initial data:', err);
-        this.loading.set(false);
+        console.error('Error cargando politicas:', err);
+        // Mostrar alerta al usuario
+        if (err.status === 401) {
+          alert('Sesion expirada. Por favor inicie sesion nuevamente.');
+        } else {
+          alert('Error al cargar politicas. Verifique la conexion.');
+        }
       },
     });
+
+    this.departmentService.getDepartments().subscribe({
+      next: (departments) => {
+        this.departments.set(departments);
+      },
+      error: (err) => {
+        console.error('Error cargando departamentos:', err);
+      },
+    });
+
+    // Cargar saldos de forma separada
+    this.loadBalances();
   }
 
   loadBalances(): void {
@@ -1001,11 +1443,197 @@ export class LeaveBalancesComponent implements OnInit {
 
   // Policies Modal
   openPoliciesModal(): void {
+    this.loadAllPolicies();
     this.showPoliciesModal.set(true);
   }
 
   closePoliciesModal(): void {
     this.showPoliciesModal.set(false);
+  }
+
+  loadAllPolicies(): void {
+    this.leaveBalanceService.getPolicies(false).subscribe({
+      next: (policies) => {
+        this.allPolicies.set(policies);
+      },
+      error: (err) => {
+        console.error('Error cargando todas las politicas:', err);
+      },
+    });
+  }
+
+  // Policy Form (Create/Edit)
+  getEmptyPolicyForm() {
+    return {
+      code: '',
+      name: '',
+      description: '',
+      unit: 'days' as LeaveUnit,
+      accrual_type: 'annual' as AccrualType,
+      base_amount: 0,
+      increment_per_years: 0,
+      years_for_increment: 1,
+      max_amount: null as number | null,
+      allow_carryover: false,
+      max_carryover: null as number | null,
+      color: '#3b82f6',
+    };
+  }
+
+  openPolicyForm(policy?: LeavePolicy): void {
+    if (policy) {
+      this.editingPolicy.set(policy);
+      this.policyForm = {
+        code: policy.code,
+        name: policy.name,
+        description: policy.description || '',
+        unit: policy.unit,
+        accrual_type: policy.accrual_type,
+        base_amount: policy.base_amount,
+        increment_per_years: policy.increment_per_years,
+        years_for_increment: policy.years_for_increment,
+        max_amount: policy.max_amount,
+        allow_carryover: policy.allow_carryover,
+        max_carryover: policy.max_carryover,
+        color: policy.color,
+      };
+    } else {
+      this.editingPolicy.set(null);
+      this.policyForm = this.getEmptyPolicyForm();
+    }
+    this.showPolicyFormModal.set(true);
+  }
+
+  closePolicyForm(): void {
+    this.showPolicyFormModal.set(false);
+    this.editingPolicy.set(null);
+  }
+
+  savePolicy(): void {
+    if (!this.policyForm.code || !this.policyForm.name) {
+      alert('Codigo y nombre son requeridos');
+      return;
+    }
+
+    this.savingPolicy.set(true);
+    const editing = this.editingPolicy();
+
+    if (editing) {
+      const updateData: LeavePolicyUpdate = {
+        name: this.policyForm.name,
+        description: this.policyForm.description || undefined,
+        unit: this.policyForm.unit,
+        accrual_type: this.policyForm.accrual_type,
+        base_amount: this.policyForm.base_amount,
+        increment_per_years: this.policyForm.increment_per_years,
+        years_for_increment: this.policyForm.years_for_increment,
+        max_amount: this.policyForm.max_amount,
+        allow_carryover: this.policyForm.allow_carryover,
+        max_carryover: this.policyForm.max_carryover,
+        color: this.policyForm.color,
+      };
+
+      this.leaveBalanceService.updatePolicy(editing.id, updateData).subscribe({
+        next: () => {
+          this.savingPolicy.set(false);
+          this.closePolicyForm();
+          this.loadAllPolicies();
+          this.loadInitialData();
+        },
+        error: (err) => {
+          this.savingPolicy.set(false);
+          console.error('Error actualizando politica:', err);
+          alert(err.error?.detail || 'Error al actualizar la politica');
+        },
+      });
+    } else {
+      const createData: LeavePolicyCreate = {
+        code: this.policyForm.code,
+        name: this.policyForm.name,
+        description: this.policyForm.description || undefined,
+        unit: this.policyForm.unit,
+        accrual_type: this.policyForm.accrual_type,
+        base_amount: this.policyForm.base_amount,
+        increment_per_years: this.policyForm.increment_per_years,
+        years_for_increment: this.policyForm.years_for_increment,
+        max_amount: this.policyForm.max_amount,
+        allow_carryover: this.policyForm.allow_carryover,
+        max_carryover: this.policyForm.max_carryover,
+        color: this.policyForm.color,
+      };
+
+      this.leaveBalanceService.createPolicy(createData).subscribe({
+        next: () => {
+          this.savingPolicy.set(false);
+          this.closePolicyForm();
+          this.loadAllPolicies();
+          this.loadInitialData();
+        },
+        error: (err) => {
+          this.savingPolicy.set(false);
+          console.error('Error creando politica:', err);
+          alert(err.error?.detail || 'Error al crear la politica');
+        },
+      });
+    }
+  }
+
+  // Toggle Policy Active Status
+  togglePolicyActive(policy: LeavePolicy): void {
+    const newStatus = !policy.is_active;
+    const action = newStatus ? 'activar' : 'desactivar';
+
+    this.leaveBalanceService
+      .updatePolicy(policy.id, { is_active: newStatus })
+      .subscribe({
+        next: () => {
+          this.loadAllPolicies();
+          this.loadInitialData();
+        },
+        error: (err) => {
+          console.error(`Error al ${action} politica:`, err);
+          alert(err.error?.detail || `Error al ${action} la politica`);
+        },
+      });
+  }
+
+  // Delete Policy
+  confirmDeletePolicy(policy: LeavePolicy): void {
+    this.policyToDelete.set(policy);
+    this.showDeleteConfirmModal.set(true);
+  }
+
+  closeDeleteConfirm(): void {
+    this.showDeleteConfirmModal.set(false);
+    this.policyToDelete.set(null);
+  }
+
+  deletePolicy(): void {
+    const policy = this.policyToDelete();
+    if (!policy) return;
+
+    this.savingPolicy.set(true);
+    this.leaveBalanceService.deletePolicy(policy.id).subscribe({
+      next: () => {
+        this.savingPolicy.set(false);
+        this.closeDeleteConfirm();
+        this.loadAllPolicies();
+        this.loadInitialData();
+      },
+      error: (err) => {
+        this.savingPolicy.set(false);
+        console.error('Error eliminando politica:', err);
+        alert(
+          err.error?.detail ||
+            'Error al eliminar la politica. Puede que tenga saldos asociados.'
+        );
+      },
+    });
+  }
+
+  // Helper for accrual type labels
+  getAccrualTypeLabel(type: string): string {
+    return ACCRUAL_TYPE_LABELS[type as keyof typeof ACCRUAL_TYPE_LABELS] || type;
   }
 
   // Transaction Modal

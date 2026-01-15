@@ -104,9 +104,9 @@ class LeaveService:
             raise ValueError("Employee or Policy not found")
 
         # Calcular saldo inicial
-        if policy.accrual_type == AccrualType.ANNUAL:
+        if policy.accrual_type == AccrualType.annual:
             _, _, initial = await self.calculate_vacation_days(employee, policy, period_year)
-        elif policy.accrual_type == AccrualType.FIXED:
+        elif policy.accrual_type == AccrualType.fixed:
             initial = policy.base_amount
         else:
             initial = Decimal("0")
@@ -147,7 +147,7 @@ class LeaveService:
         if initial > 0:
             await self.create_transaction(
                 balance_id=balance.id,
-                transaction_type=TransactionType.CREDIT,
+                transaction_type=TransactionType.credit,
                 amount=initial,
                 description=f"Acreditacion inicial periodo {period_year}"
             )
@@ -155,7 +155,7 @@ class LeaveService:
         if carryover > 0:
             await self.create_transaction(
                 balance_id=balance.id,
-                transaction_type=TransactionType.CREDIT,
+                transaction_type=TransactionType.credit,
                 amount=carryover,
                 description=f"Arrastre periodo {period_year - 1}"
             )
@@ -186,14 +186,14 @@ class LeaveService:
         balance_before = balance.current_balance
 
         # Calcular nuevo saldo
-        if transaction_type in [TransactionType.CREDIT]:
+        if transaction_type in [TransactionType.credit]:
             balance_after = balance_before + amount
             balance.current_balance = balance_after
-        elif transaction_type in [TransactionType.DEBIT, TransactionType.EXPIRATION]:
+        elif transaction_type in [TransactionType.debit, TransactionType.expiration]:
             balance_after = balance_before - amount
             balance.current_balance = balance_after
             balance.used_amount += amount
-        elif transaction_type == TransactionType.ADJUSTMENT:
+        elif transaction_type == TransactionType.adjustment:
             # Adjustment puede ser positivo o negativo
             balance_after = balance_before + amount  # amount puede ser negativo
             balance.current_balance = balance_after
@@ -266,7 +266,7 @@ class LeaveService:
         # Crear transaccion de descuento
         transaction = await self.create_transaction(
             balance_id=balance.id,
-            transaction_type=TransactionType.DEBIT,
+            transaction_type=TransactionType.debit,
             amount=Decimal(str(days)),
             description=f"{schedule_exception.exception_type.value}: {schedule_exception.description or 'Sin descripcion'}",
             schedule_exception_id=schedule_exception.id,
