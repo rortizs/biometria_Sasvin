@@ -1649,15 +1649,96 @@ export class SchedulesComponent implements OnInit {
 
     Promise.all(promises)
       .then((results) => {
-        // Count total existing assignments
-        const totalCount = results.reduce((sum, assignments) => sum + (assignments?.length || 0), 0);
+        // Flatten all assignments
+        const allAssignments = results.flat().filter((a): a is ScheduleAssignment => a !== undefined);
+        const totalCount = allAssignments.length;
         this.existingAssignmentsCount.set(totalCount);
+
+        // Pre-fill form if there are existing assignments
+        if (totalCount > 0) {
+          this.prefillAssignFormFromExisting(allAssignments);
+        }
+
         this.loadingAssignments.set(false);
       })
       .catch((err) => {
         console.error('Error checking existing assignments:', err);
         this.loadingAssignments.set(false);
       });
+  }
+
+  /**
+   * Analyzes existing assignments and pre-fills the assign form with:
+   * - Most common pattern (schedule_pattern_id)
+   * - Detected days of the week
+   * - Actual date range (min and max dates)
+   */
+  private prefillAssignFormFromExisting(assignments: ScheduleAssignment[]): void {
+    if (assignments.length === 0) return;
+
+    // 1. Find the most common pattern
+    const patternCounts = new Map<string, number>();
+    let hasDayOff = false;
+
+    for (const assignment of assignments) {
+      if (assignment.is_day_off) {
+        hasDayOff = true;
+      }
+      if (assignment.schedule_pattern_id) {
+        const count = patternCounts.get(assignment.schedule_pattern_id) || 0;
+        patternCounts.set(assignment.schedule_pattern_id, count + 1);
+      }
+    }
+
+    // Get the most frequent pattern
+    let mostCommonPattern = '';
+    let maxCount = 0;
+    for (const [patternId, count] of patternCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommonPattern = patternId;
+      }
+    }
+
+    // 2. Detect days of the week with assignments
+    const detectedDays = new Set<number>();
+    let minDate: string | null = null;
+    let maxDate: string | null = null;
+
+    for (const assignment of assignments) {
+      const date = new Date(assignment.date + 'T00:00:00'); // Ensure consistent parsing
+      // Convert JS day (0=Sunday) to our format (0=Monday)
+      const jsDay = date.getDay();
+      const dayOfWeek = jsDay === 0 ? 6 : jsDay - 1;
+      detectedDays.add(dayOfWeek);
+
+      // Track min/max dates
+      if (!minDate || assignment.date < minDate) {
+        minDate = assignment.date;
+      }
+      if (!maxDate || assignment.date > maxDate) {
+        maxDate = assignment.date;
+      }
+    }
+
+    // 3. Update the form with detected values
+    if (mostCommonPattern) {
+      this.assignForm.patternId = mostCommonPattern;
+    }
+
+    if (detectedDays.size > 0) {
+      this.assignForm.daysOfWeek = Array.from(detectedDays).sort((a, b) => a - b);
+    }
+
+    if (minDate && maxDate) {
+      this.assignForm.startDate = minDate;
+      this.assignForm.endDate = maxDate;
+    }
+
+    // If all assignments are day_off, mark the checkbox
+    if (hasDayOff && !mostCommonPattern) {
+      this.assignForm.isDayOff = true;
+    }
   }
 
   toggleWeekday(day: number): void {
