@@ -1636,13 +1636,12 @@ export class SchedulesComponent implements OnInit {
 
     this.loadingAssignments.set(true);
 
-    // Check assignments for all selected employees in the date range
+    // Search ALL assignments for the employee (no date filter)
+    // This ensures we find assignments even if they're outside the visible calendar week
     const promises = employeeIds.map((empId) =>
       this.scheduleService
         .getAssignments({
           employee_id: empId,
-          date_from: this.assignForm.startDate,
-          date_to: this.assignForm.endDate,
         })
         .toPromise()
     );
