@@ -15,7 +15,7 @@ import { ToastService } from '../../../../shared/services/toast.service';
 import { Location, LocationCreate, LocationUpdate } from '../../../../core/models/location.model';
 
 @Component({
-  selector: 'app-locations',
+  selector: 'app-locations-maplibre',
   standalone: true,
   imports: [
     CommonModule,
@@ -925,7 +925,7 @@ import { Location, LocationCreate, LocationUpdate } from '../../../../core/model
     }
   `]
 })
-export class LocationsComponent implements OnInit {
+export class LocationsMapLibreComponent implements OnInit {
   private readonly locationService = inject(LocationService);
   private readonly toastService = inject(ToastService);
 

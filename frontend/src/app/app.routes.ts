@@ -13,6 +13,26 @@ export const routes: Routes = [
       import('./features/kiosk/kiosk.component').then((m) => m.KioskComponent),
   },
   {
+    path: 'demo',
+    children: [
+      {
+        path: '',
+        redirectTo: 'simple',
+        pathMatch: 'full'
+      },
+      {
+        path: 'simple',
+        loadComponent: () =>
+          import('./features/demo/simple-demo.component').then((m) => m.SimpleDemoComponent),
+      },
+      {
+        path: 'map-full',
+        loadComponent: () =>
+          import('./features/demo/map-demo.component').then((m) => m.MapDemoComponent),
+      }
+    ]
+  },
+  {
     path: 'auth',
     canActivate: [guestGuard],
     children: [

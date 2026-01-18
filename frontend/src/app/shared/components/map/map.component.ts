@@ -166,7 +166,7 @@ export interface MapBounds {
     }
   `],
   host: {
-    '[class.dark]': 'themeService.isDark()'
+    '[class.dark]': 'isDark()'
   }
 })
 export class MapComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -194,6 +194,7 @@ export class MapComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // State
   readonly isLoading = signal(true);
+  readonly isDark = signal(false);
   
   private map: MapLibreMap | null = null;
   private resizeObserver?: ResizeObserver;
@@ -201,6 +202,9 @@ export class MapComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor() {
     // Auto-update map style when theme changes
     effect(() => {
+      const isDark = this.themeService.isDark();
+      this.isDark.set(isDark);
+      
       if (this.map) {
         const newStyle = this.mapStyleService.getCurrentStyle();
         this.map.setStyle(newStyle);
