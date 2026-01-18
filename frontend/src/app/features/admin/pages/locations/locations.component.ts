@@ -7,6 +7,7 @@ import {
   MapControlsComponent, 
   MapMarkerComponent, 
   MapPopupComponent,
+  MapStyleSwitcherComponent,
   type MapClickEvent,
   type MarkerClickEvent
 } from '../../../../shared/components/map';
@@ -24,7 +25,8 @@ import { Location, LocationCreate, LocationUpdate } from '../../../../core/model
     MapComponent,
     MapControlsComponent,
     MapMarkerComponent,
-    MapPopupComponent
+    MapPopupComponent,
+    MapStyleSwitcherComponent
   ],
   template: `
     <div class="locations-page">
@@ -115,16 +117,22 @@ import { Location, LocationCreate, LocationUpdate } from '../../../../core/model
         <!-- Map Section -->
         <div class="map-section">
           <div class="map-header">
-            <h2>Mapa Interactivo</h2>
-            <div class="map-info">
-              <span class="info-badge">MapLibre GL</span>
-              @if (selectedLocation()) {
-                <span class="selected-info">
-                  📍 {{ selectedLocation()!.name }}
-                </span>
-              } @else {
-                <span class="hint">Haz clic en una ubicación o en el mapa para agregar</span>
-              }
+            <div class="map-header-left">
+              <h2>Mapa Interactivo</h2>
+              <div class="map-info">
+                <span class="info-badge">MapLibre GL</span>
+                @if (selectedLocation()) {
+                  <span class="selected-info">
+                    📍 {{ selectedLocation()!.name }}
+                  </span>
+                } @else {
+                  <span class="hint">Haz clic en una ubicación o en el mapa para agregar</span>
+                }
+              </div>
+            </div>
+            
+            <div class="map-header-right">
+              <app-map-style-switcher />
             </div>
           </div>
           
@@ -273,8 +281,8 @@ import { Location, LocationCreate, LocationUpdate } from '../../../../core/model
                       step="0.000001"
                       required
                       class="form-input"
-                      readonly
                     >
+                    <small>Puedes modificar manualmente o hacer clic en el mapa</small>
                   </div>
 
                   <div class="form-group">
@@ -287,8 +295,8 @@ import { Location, LocationCreate, LocationUpdate } from '../../../../core/model
                       step="0.000001"
                       required
                       class="form-input"
-                      readonly
                     >
+                    <small>Puedes modificar manualmente o hacer clic en el mapa</small>
                   </div>
                 </div>
 
@@ -597,13 +605,22 @@ import { Location, LocationCreate, LocationUpdate } from '../../../../core/model
       background: #f9fafb;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .map-header-left {
+      flex: 1;
+    }
+
+    .map-header-right {
+      flex-shrink: 0;
     }
 
     .map-header h2 {
       font-size: 1.25rem;
       font-weight: 600;
-      margin: 0;
+      margin: 0 0 0.5rem 0;
       color: #1f2937;
     }
 
@@ -611,6 +628,7 @@ import { Location, LocationCreate, LocationUpdate } from '../../../../core/model
       display: flex;
       gap: 1rem;
       align-items: center;
+      flex-wrap: wrap;
     }
 
     .info-badge {

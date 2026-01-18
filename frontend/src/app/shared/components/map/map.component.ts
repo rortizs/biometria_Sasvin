@@ -200,10 +200,20 @@ export class MapComponent implements OnInit, AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
 
   constructor() {
-    // Auto-update map style when theme changes
+    // Auto-update map style when theme OR style type changes
     effect(() => {
       const isDark = this.themeService.isDark();
       this.isDark.set(isDark);
+      
+      if (this.map) {
+        const newStyle = this.mapStyleService.getCurrentStyle();
+        this.map.setStyle(newStyle);
+      }
+    });
+
+    // React to style type changes
+    effect(() => {
+      const styleType = this.mapStyleService.currentStyleType();
       
       if (this.map) {
         const newStyle = this.mapStyleService.getCurrentStyle();
