@@ -52,7 +52,8 @@
               }
             ],
             "styles": [
-              "src/styles.scss"
+              "src/styles.scss",
+              "node_modules/maplibre-gl/dist/maplibre-gl.css"
             ]
           },
           "configurations": {
@@ -110,7 +111,8 @@
               }
             ],
             "styles": [
-              "src/styles.scss"
+              "src/styles.scss",
+              "node_modules/maplibre-gl/dist/maplibre-gl.css"
             ]
           }
         }
