@@ -135,8 +135,15 @@ class ScheduleExceptionResponse(ScheduleExceptionBase):
 # Bulk Assignment for Calendar View
 class BulkAssignmentCreate(BaseModel):
     employee_ids: list[UUID]
-    dates: list[date]
+    # Option 1: Specific dates
+    dates: list[date] | None = None
+    # Option 2: Date range with optional days filter
+    start_date: date | None = None
+    end_date: date | None = None
+    days_of_week: list[int] | None = None  # 0=Monday, 6=Sunday
+    # Schedule to assign
     schedule_id: UUID | None = None
+    schedule_pattern_id: UUID | None = None  # Alias for schedule_id
     is_day_off: bool = False
 
 

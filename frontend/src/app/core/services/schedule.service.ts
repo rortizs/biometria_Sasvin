@@ -58,8 +58,8 @@ export class ScheduleService {
 
   createBulkAssignments(
     bulk: BulkScheduleAssignment
-  ): Observable<{ created: number; message: string }> {
-    return this.api.post<{ created: number; message: string }>(
+  ): Observable<{ created: number; updated: number }> {
+    return this.api.post<{ created: number; updated: number }>(
       '/schedules/assignments/bulk',
       bulk
     );
