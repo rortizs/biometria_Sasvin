@@ -23,6 +23,19 @@ face-recognition>=1.3.0
 numpy>=1.26.0
 pillow>=10.0.0
 
+# PostGIS & Geolocation
+geoalchemy2>=0.14.0
+shapely>=2.0.0
+
+# Anti-Spoofing & Image Processing
+opencv-python-headless>=4.9.0
+scikit-learn>=1.4.0  # For anti-spoofing model
+onnxruntime>=1.17.0  # For optimized inference (CPU)
+
+# Rate Limiting
+fastapi-limiter>=0.1.6
+redis>=5.0.0
+
 # Utils
 python-dotenv>=1.0.0
 setuptools>=70.0.0  # Required for face_recognition_models in Python 3.12+
