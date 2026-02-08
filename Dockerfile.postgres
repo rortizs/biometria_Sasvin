@@ -1,0 +1,6 @@
+# PostgreSQL 16 with PostGIS 3.4 for geolocation fraud detection
+# Note: We use FLOAT8[] for face embeddings instead of pgvector since:
+# - pgvector provides performance optimization (not security)
+# - For <10,000 employees, native arrays are sufficient
+# - Eliminates complex compilation in Docker
+FROM postgis/postgis:16-3.4

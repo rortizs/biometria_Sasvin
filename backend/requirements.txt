@@ -7,7 +7,7 @@ python-multipart>=0.0.6
 sqlalchemy>=2.0.0
 alembic>=1.13.0
 asyncpg>=0.29.0
-pgvector>=0.2.0
+# Note: Using native PostgreSQL FLOAT8[] for embeddings (pgvector not needed for <10k employees)
 
 # Pydantic
 pydantic>=2.0.0
