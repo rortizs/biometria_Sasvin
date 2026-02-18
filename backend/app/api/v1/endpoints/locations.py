@@ -2,6 +2,8 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from geoalchemy2.shape import from_shape
+from shapely.geometry import Point
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,7 +59,11 @@ async def create_location(
     location_in: LocationCreate,
 ) -> Location:
     """Create a new location (admin only)."""
-    location = Location(**location_in.model_dump())
+    data = location_in.model_dump()
+    data["location_point"] = from_shape(
+        Point(data["longitude"], data["latitude"]), srid=4326
+    )
+    location = Location(**data)
     db.add(location)
     await db.commit()
     await db.refresh(location)

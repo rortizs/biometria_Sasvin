@@ -52,6 +52,10 @@ async def get_current_user(
     return user
 
 
+# Alias for backward compatibility (get_current_user already validates is_active)
+get_current_active_user = get_current_user
+
+
 async def get_current_active_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
