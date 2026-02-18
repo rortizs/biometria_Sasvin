@@ -135,7 +135,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 |---|---|
 | **Repositorio** | https://github.com/rortizs/biometria_Sasvin |
 | **Rama activa** | `feature/anti-spoofing-postgis` |
-| **Último commit** | `(pendiente)` — fix(settings,employees): first-setup UI + trailing slash fixes |
+| **Último commit** | `ab3ca42` — fix(settings,employees): first-setup UI + trailing slash fixes |
 | **Estado** | ✅ Sincronizado con `origin` |
 
 ### Historial reciente
