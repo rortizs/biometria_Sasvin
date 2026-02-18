@@ -16,3 +16,11 @@ export interface SettingsUpdate {
   email_domain?: string;
   logo_url?: string | null;
 }
+
+export interface SettingsCreate {
+  company_name: string;
+  email_domain: string;
+  company_address?: string | null;
+  slogan?: string | null;
+  logo_url?: string | null;
+}

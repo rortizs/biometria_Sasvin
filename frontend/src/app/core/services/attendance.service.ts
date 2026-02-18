@@ -34,6 +34,6 @@ export class AttendanceService {
     skip?: number;
     limit?: number;
   }): Observable<AttendanceRecord[]> {
-    return this.api.get<AttendanceRecord[]>('/attendance', params as Record<string, string | number>);
+    return this.api.get<AttendanceRecord[]>('/attendance/', params as Record<string, string | number>);
   }
 }

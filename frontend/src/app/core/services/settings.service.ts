@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
-import { Settings, SettingsUpdate } from '../models/settings.model';
+import { Settings, SettingsCreate, SettingsUpdate } from '../models/settings.model';
 
 @Injectable({
   providedIn: 'root'
@@ -11,6 +11,10 @@ export class SettingsService {
 
   getSettings(): Observable<Settings> {
     return this.api.get<Settings>('/settings/');
+  }
+
+  createSettings(settings: SettingsCreate): Observable<Settings> {
+    return this.api.post<Settings>('/settings/', settings);
   }
 
   updateSettings(settings: SettingsUpdate): Observable<Settings> {

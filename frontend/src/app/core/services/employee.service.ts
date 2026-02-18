@@ -14,7 +14,7 @@ export class EmployeeService {
     limit?: number;
     active_only?: boolean;
   }): Observable<Employee[]> {
-    return this.api.get<Employee[]>('/employees', params as Record<string, string | number | boolean>);
+    return this.api.get<Employee[]>('/employees/', params as Record<string, string | number | boolean>);
   }
 
   getById(id: string): Observable<Employee> {
@@ -22,7 +22,7 @@ export class EmployeeService {
   }
 
   create(employee: EmployeeCreate): Observable<Employee> {
-    return this.api.post<Employee>('/employees', employee);
+    return this.api.post<Employee>('/employees/', employee);
   }
 
   update(id: string, employee: EmployeeUpdate): Observable<Employee> {

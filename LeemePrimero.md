@@ -129,6 +129,27 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 
 ---
 
+## Estado del repositorio
+
+| Campo | Valor |
+|---|---|
+| **Repositorio** | https://github.com/rortizs/biometria_Sasvin |
+| **Rama activa** | `feature/anti-spoofing-postgis` |
+| **Último commit** | `(pendiente)` — fix(settings,employees): first-setup UI + trailing slash fixes |
+| **Estado** | ✅ Sincronizado con `origin` |
+
+### Historial reciente
+| Commit | Descripción |
+|---|---|
+| `214b83c` | fix(locations): build PostGIS location_point from lat/lon on create + LeemePrimero.md |
+| `fa07d1b` | feat: integrate complete anti-fraud stack in attendance endpoints |
+| `3dd5611` | feat: implement anti-spoofing service with liveness detection |
+| `b3a2949` | feat: implement PostGIS geolocation and fraud detection services |
+| `ffcce82` | feat: update SQLAlchemy models and Pydantic schemas for PostGIS and anti-spoofing |
+| `ff73de2` | feat: add PostGIS geography columns and anti-spoofing database fields |
+
+---
+
 ## URLs útiles
 
 | Servicio | URL |
@@ -185,7 +206,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 - [x] Historial de asistencia
 - [x] Configuración del sistema
 - [ ] Registro facial de empleados (UI para capturar rostro)
-- [ ] Dashboard con estadísticas reales (actualmente con datos mock)
+- [x] Dashboard con estadísticas reales (employees + attendance/today conectados al backend)
 - [ ] Reportes de asistencia (filtros, exportación)
 - [ ] Gestión de departamentos (UI)
 - [ ] Gestión de cargos (UI)
@@ -216,12 +237,15 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 | 5 | 2026-02-17 | CORS bloqueando response del 500 de locations | FastAPI no agrega headers CORS en excepciones no manejadas (500 puro) | Resuelto al corregir el issue #4 |
 | 6 | 2026-02-17 | `404 GET /settings/` | DB vacía, no hay registro de configuración inicial | Comportamiento esperado. Pendiente: seed data o UI para crear settings desde cero |
 
+| 7 | 2026-02-17 | `POST /employees` (sin trailing slash) devolvía 307 redirect | Inconsistencia trailing slash entre frontend y backend | Fix en `employee.service.ts` y `attendance.service.ts`: agregar `/` a las rutas de listado y creación |
+| 8 | 2026-02-17 | `GET /settings/` devuelve 404 → frontend mostraba solo "No se pudo cargar" sin forma de crear | Frontend no manejaba el 404 como primer setup | Fix en `settings.component.ts`: detectar 404 → mostrar formulario vacío con botón "Crear Configuración". Fix en `settings.service.ts`: agregar `createSettings()`. Fix en `settings.model.ts`: agregar interfaz `SettingsCreate`. Config inicial creada en DB. |
+
 ### Pendientes / En investigación 🔍
 
 | # | Fecha | Issue | Estado |
 |---|---|---|---|
-| 7 | 2026-02-17 | Dashboard con datos mock — estadísticas no conectadas al backend real | Pendiente |
-| 8 | 2026-02-17 | `GET /settings/` devuelve 404 si no hay configuración inicial | Pendiente agregar seed o manejo en el frontend para crear la config la primera vez |
+| 9 | 2026-02-18 | Registro facial de empleados — UI no implementada | Pendiente: UI para capturar rostro via webcam y llamar a `POST /faces/register` |
+| 10 | 2026-02-18 | Dashboard: `withFaceRegistered` correcta (de `has_face_registered` en empleados) pero `presentToday` depende de check-ins reales | Funcionando con datos reales. Pendiente probar con check-in real |
 
 ---
 
