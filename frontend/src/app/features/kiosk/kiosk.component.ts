@@ -8,9 +8,12 @@ import {
   ElementRef,
   computed,
   afterNextRender,
+  isDevMode,
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
+import { filter } from 'rxjs/operators';
 import { CameraService } from '../../core/services/camera.service';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { GeolocationService } from '../../core/services/geolocation.service';
@@ -148,6 +151,19 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
       <!-- Footer -->
       <footer class="kiosk-footer">
         <a routerLink="/admin/dashboard" class="admin-link">Administración</a>
+        
+        <!-- PWA Install Button (only shown when installable and not dismissed) -->
+        @if (showInstallButton() && !isStandalone()) {
+          <div class="install-prompt">
+            <button class="install-btn" (click)="installPWA()">
+              <span class="install-icon">📲</span>
+              Instalar Aplicación
+            </button>
+            <button class="dismiss-btn" (click)="dismissInstallPrompt()" title="No mostrar nuevamente">
+              ✕
+            </button>
+          </div>
+        }
       </footer>
     </div>
   `,
@@ -464,6 +480,91 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
       color: white;
     }
 
+    /* PWA Install Prompt Styles */
+    .install-prompt {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      padding: 0.5rem;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 0.5rem;
+      animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .install-btn {
+      /* Touch target: min 44x44px */
+      min-height: 44px;
+      min-width: 44px;
+      padding: 0.75rem 1.25rem;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .install-btn:hover {
+      background: #2563eb;
+      transform: scale(1.02);
+    }
+
+    .install-btn:active {
+      transform: scale(0.98);
+    }
+
+    .install-icon {
+      font-size: 1.2rem;
+    }
+
+    .dismiss-btn {
+      /* Touch target: min 44x44px */
+      min-height: 44px;
+      min-width: 44px;
+      padding: 0.5rem;
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.6);
+      border: none;
+      border-radius: 0.375rem;
+      font-size: 1.2rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dismiss-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+
+    /* Hide install prompt in standalone mode (already installed) */
+    @media (display-mode: standalone) {
+      .install-prompt {
+        display: none !important;
+      }
+    }
+
     /* Orientation warning overlay for tablets */
     .orientation-warning-overlay {
       position: fixed;
@@ -531,11 +632,16 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly cameraService = inject(CameraService);
   private readonly attendanceService = inject(AttendanceService);
   private readonly geolocationService = inject(GeolocationService);
+  private readonly platformService = inject(PlatformService);
+  private readonly swUpdate = inject(SwUpdate);
 
   private clockInterval?: ReturnType<typeof setInterval>;
   private resultTimeout?: ReturnType<typeof setTimeout>;
   private orientationMediaQuery?: MediaQueryList;
   private orientationChangeHandler?: () => void;
+  private updateCheckInterval?: ReturnType<typeof setInterval>;
+  private idleStartTime: number | null = null;
+  private hasUpdateAvailable = false;
 
   readonly mode = signal<KioskMode>('idle');
   readonly isCheckIn = signal(true);
@@ -549,13 +655,24 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly geoError = signal<string>('');
   private currentPosition: GeoPosition | null = null;
 
-  // Orientation handling for tablets (screen width > 600px)
-  readonly showOrientationWarning = signal(false);
+  // Orientation handling for tablets: portrait orientation signal
+  private readonly isPortrait = signal(false);
+  
+  // Show warning when tablet is in portrait mode (landscape recommended)
+  readonly showOrientationWarning = computed(() => 
+    this.platformService.isTablet() && this.isPortrait()
+  );
+
+  // PWA install prompt handling for kiosk tablets
+  private deferredPrompt: any = null;
+  readonly showInstallButton = signal(false);
+  readonly isStandalone = signal(false);
 
   ngOnInit(): void {
     this.startClock();
     this.requestGeolocation();
     this.setupOrientationListener();
+    this.setupPWAInstallPrompt();
   }
 
   private requestGeolocation(): void {
@@ -589,6 +706,9 @@ export class KioskComponent implements OnInit, OnDestroy {
     }
     if (this.resultTimeout) {
       clearTimeout(this.resultTimeout);
+    }
+    if (this.updateCheckInterval) {
+      clearInterval(this.updateCheckInterval);
     }
     this.cleanupOrientationListener();
     this.cameraService.stop();
@@ -685,8 +805,8 @@ export class KioskComponent implements OnInit, OnDestroy {
    * Phones (width <= 600px) and desktop (width >= 1024px) are excluded via CSS.
    */
   private setupOrientationListener(): void {
-    // Check if device is a tablet (screen width > 600px and < 1024px)
-    const isTablet = window.innerWidth > 600 && window.innerWidth < 1024;
+    // Only set up listener for tablets (determined by PlatformService)
+    const isTablet = this.platformService.isTablet();
     
     if (!isTablet) {
       // Skip orientation handling on phones and desktop
@@ -694,32 +814,31 @@ export class KioskComponent implements OnInit, OnDestroy {
     }
 
     // Create MediaQueryList for orientation detection
-    this.orientationMediaQuery = window.matchMedia('(orientation: landscape)');
+    this.orientationMediaQuery = window.matchMedia('(orientation: portrait)');
     
     // Initial check
-    this.checkOrientation();
+    this.updateOrientationState();
     
     // Create handler function
-    this.orientationChangeHandler = () => this.checkOrientation();
+    this.orientationChangeHandler = () => this.updateOrientationState();
     
     // Add listener for orientation changes
     this.orientationMediaQuery.addEventListener('change', this.orientationChangeHandler);
   }
 
   /**
-   * Check current orientation and update warning state.
-   * Shows warning if in portrait mode on tablet.
+   * Update orientation state signal.
+   * The showOrientationWarning computed signal will show the overlay when tablet is in portrait mode.
    */
-  private checkOrientation(): void {
+  private updateOrientationState(): void {
     if (!this.orientationMediaQuery) {
       return;
     }
 
-    const isLandscape = this.orientationMediaQuery.matches;
-    const isTablet = window.innerWidth > 600 && window.innerWidth < 1024;
+    const isPortraitMode = this.orientationMediaQuery.matches;
     
-    // Show warning if tablet is in portrait mode
-    this.showOrientationWarning.set(isTablet && !isLandscape);
+    // Update portrait signal (showOrientationWarning is computed from this)
+    this.isPortrait.set(isPortraitMode);
   }
 
   /**
@@ -729,5 +848,81 @@ export class KioskComponent implements OnInit, OnDestroy {
     if (this.orientationMediaQuery && this.orientationChangeHandler) {
       this.orientationMediaQuery.removeEventListener('change', this.orientationChangeHandler);
     }
+  }
+
+  /**
+   * Setup PWA install prompt handling for kiosk tablets.
+   * Listens for beforeinstallprompt event and displays install button when available.
+   * Also checks if app is already installed (standalone mode).
+   */
+  private setupPWAInstallPrompt(): void {
+    // Check if already installed (standalone mode)
+    const isStandalone = 
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+    
+    this.isStandalone.set(isStandalone);
+
+    // If already installed, no need to show install button
+    if (isStandalone) {
+      return;
+    }
+
+    // Check if install prompt was dismissed before (localStorage flag)
+    const installDismissed = localStorage.getItem('pwa-install-dismissed');
+    if (installDismissed === 'true') {
+      return;
+    }
+
+    // Listen for beforeinstallprompt event (Chrome/Edge on Android)
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
+      // Stash the event so it can be triggered later
+      this.deferredPrompt = e;
+      // Show the install button
+      this.showInstallButton.set(true);
+    });
+
+    // Listen for appinstalled event
+    window.addEventListener('appinstalled', () => {
+      this.deferredPrompt = null;
+      this.showInstallButton.set(false);
+      this.isStandalone.set(true);
+    });
+  }
+
+  /**
+   * Trigger PWA install prompt when user clicks install button.
+   */
+  async installPWA(): Promise<void> {
+    if (!this.deferredPrompt) {
+      return;
+    }
+
+    // Show the install prompt
+    this.deferredPrompt.prompt();
+
+    // Wait for the user to respond to the prompt
+    const { outcome } = await this.deferredPrompt.userChoice;
+
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+
+    // Clear the deferred prompt
+    this.deferredPrompt = null;
+    this.showInstallButton.set(false);
+  }
+
+  /**
+   * Dismiss install prompt and don't show again (save to localStorage).
+   */
+  dismissInstallPrompt(): void {
+    localStorage.setItem('pwa-install-dismissed', 'true');
+    this.showInstallButton.set(false);
+    this.deferredPrompt = null;
   }
 }

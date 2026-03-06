@@ -565,7 +565,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 4.2 Implement PWA install prompt handling for kiosk tablets
+### 4.2 Implement PWA install prompt handling for kiosk tablets ✅
 
 **Description**: Create a minimal service or component logic that captures the `beforeinstallprompt` event and provides an "Install" button in the kiosk footer. The button only appears in Chrome on Android tablets (where install prompt is supported). On iOS, display a hint about "Add to Home Screen" via Share menu.
 
