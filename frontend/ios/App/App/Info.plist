@@ -47,5 +47,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Esta app necesita acceso a la camara para capturar tu rostro y registrar tu asistencia de forma segura mediante reconocimiento facial.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Esta app necesita acceso a tu ubicacion para verificar que estas marcando asistencia desde una ubicacion autorizada.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Esta app utiliza reconocimiento facial biometrico para verificar tu identidad al marcar asistencia.</string>
 </dict>
 </plist>
