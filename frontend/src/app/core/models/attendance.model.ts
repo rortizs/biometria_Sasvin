@@ -20,7 +20,7 @@ export interface AttendanceRecord {
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'early_leave';
 
 export interface AttendanceCheckInRequest {
-  image: string;
+  images: string[];
   device_id?: string;
   latitude?: number;
   longitude?: number;

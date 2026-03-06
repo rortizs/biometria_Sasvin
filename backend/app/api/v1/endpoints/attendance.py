@@ -12,7 +12,11 @@ from app.models.attendance import AttendanceRecord
 from app.models.employee import Employee
 from app.models.location import Location
 from app.models.user import User
-from app.schemas.attendance import AttendanceCheckIn, AttendanceCheckOut, AttendanceResponse
+from app.schemas.attendance import (
+    AttendanceCheckIn,
+    AttendanceCheckOut,
+    AttendanceResponse,
+)
 from app.services.face_recognition import FaceRecognitionService
 from app.services.geolocation import validate_location
 
@@ -65,9 +69,9 @@ async def check_in(
 ) -> AttendanceResponse:
     face_service = FaceRecognitionService()
 
-    # Get embedding from provided image
+    # Get embedding from first image in the array
     try:
-        query_embedding = face_service.get_face_embedding(request.image)
+        query_embedding = face_service.get_face_embedding(request.images[0])
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -173,7 +177,7 @@ async def check_out(
     face_service = FaceRecognitionService()
 
     try:
-        query_embedding = face_service.get_face_embedding(request.image)
+        query_embedding = face_service.get_face_embedding(request.images[0])
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -298,7 +302,9 @@ async def list_attendance(
     if status:
         query = query.where(AttendanceRecord.status == status)
 
-    query = query.offset(skip).limit(limit).order_by(AttendanceRecord.record_date.desc())
+    query = (
+        query.offset(skip).limit(limit).order_by(AttendanceRecord.record_date.desc())
+    )
 
     result = await db.execute(query)
     records = result.scalars().all()

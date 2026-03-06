@@ -1,21 +1,41 @@
 from datetime import datetime, date
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AttendanceCheckIn(BaseModel):
-    image: str  # Base64 encoded image
+    images: list[str] = Field(..., min_length=1, max_length=5)  # Base64 encoded images
+    image: str | None = None  # DEPRECATED: backward compat alias
     device_id: UUID | None = None
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_single_image(cls, data: dict) -> dict:
+        """Backward compat: if 'image' provided but not 'images', wrap it."""
+        if isinstance(data, dict):
+            if "image" in data and "images" not in data:
+                data["images"] = [data["image"]]
+        return data
 
 
 class AttendanceCheckOut(BaseModel):
-    image: str  # Base64 encoded image
+    images: list[str] = Field(..., min_length=1, max_length=5)  # Base64 encoded images
+    image: str | None = None  # DEPRECATED: backward compat alias
     device_id: UUID | None = None
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_single_image(cls, data: dict) -> dict:
+        """Backward compat: if 'image' provided but not 'images', wrap it."""
+        if isinstance(data, dict):
+            if "image" in data and "images" not in data:
+                data["images"] = [data["image"]]
+        return data
 
 
 class AttendanceResponse(BaseModel):
@@ -37,6 +57,7 @@ class AttendanceResponse(BaseModel):
 
 class AttendanceRecordResponse(BaseModel):
     """Full attendance record response."""
+
     id: UUID
     employee_id: UUID
     record_date: date

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -7,6 +7,7 @@ import { EmployeeService } from '../../../../core/services/employee.service';
 import { PositionService } from '../../../../core/services/position.service';
 import { DepartmentService } from '../../../../core/services/department.service';
 import { LocationService } from '../../../../core/services/location.service';
+import { CameraService } from '../../../../core/services/camera.service';
 import { Employee, EmployeeCreate } from '../../../../core/models/employee.model';
 import { Position } from '../../../../core/models/position.model';
 import { Department } from '../../../../core/models/department.model';
@@ -366,21 +367,19 @@ export class EmployeesComponent implements OnInit {
   private readonly positionService = inject(PositionService);
   private readonly departmentService = inject(DepartmentService);
   private readonly locationService = inject(LocationService);
+  private readonly cameraService = inject(CameraService);
 
   readonly employees = signal<Employee[]>([]);
   readonly positions = signal<Position[]>([]);
   readonly departments = signal<Department[]>([]);
   readonly locations = signal<Location[]>([]);
-
   readonly showModal = signal(false);
-  readonly editMode = signal(false);
-  readonly editingEmployeeId = signal<string | null>(null);
   readonly showFaceModal = signal(false);
   readonly selectedEmployee = signal<Employee | null>(null);
+  readonly modalMode = signal<'create' | 'edit'>('create');
   readonly capturedImages = signal<string[]>([]);
 
-  private videoElement: HTMLVideoElement | null = null;
-  private stream: MediaStream | null = null;
+  @ViewChild('faceVideo') faceVideoRef!: ElementRef<HTMLVideoElement>;
 
   newEmployee: EmployeeCreate = {
     employee_code: '',
@@ -521,14 +520,10 @@ export class EmployeesComponent implements OnInit {
 
   private async startCamera(): Promise<void> {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' },
-      });
-
-      setTimeout(() => {
-        this.videoElement = document.querySelector('.face-modal video');
-        if (this.videoElement) {
-          this.videoElement.srcObject = this.stream;
+      // Wait a tick for the video element to be available in the DOM
+      setTimeout(async () => {
+        if (this.faceVideoRef?.nativeElement) {
+          await this.cameraService.start(this.faceVideoRef.nativeElement);
         }
       }, 100);
     } catch (error) {
@@ -538,18 +533,10 @@ export class EmployeesComponent implements OnInit {
   }
 
   captureImage(): void {
-    if (!this.videoElement) return;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = this.videoElement.videoWidth;
-    canvas.height = this.videoElement.videoHeight;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.drawImage(this.videoElement, 0, 0);
-    const image = canvas.toDataURL('image/jpeg', 0.8);
-    this.capturedImages.update((images) => [...images, image]);
+    const frame = this.cameraService.captureFrame();
+    if (frame) {
+      this.capturedImages.update((images) => [...images, frame]);
+    }
   }
 
   saveFaces(): void {
@@ -571,10 +558,7 @@ export class EmployeesComponent implements OnInit {
   }
 
   closeFaceModal(): void {
-    if (this.stream) {
-      this.stream.getTracks().forEach((track) => track.stop());
-      this.stream = null;
-    }
+    this.cameraService.stop();
     this.showFaceModal.set(false);
     this.selectedEmployee.set(null);
     this.capturedImages.set([]);

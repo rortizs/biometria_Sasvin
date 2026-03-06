@@ -47,7 +47,7 @@
 
 ## Phase 1: Foundation (Days 1-4, March 4-7)
 
-### 1.1 Install Capacitor and Angular PWA dependencies
+### 1.1 Install Capacitor and Angular PWA dependencies ✅
 
 **Description**: Add all required npm packages to `frontend/package.json`. Install Capacitor core/cli, geolocation plugin, app lifecycle plugin, splash screen plugin, and Angular service worker. Do NOT run `cap add ios`/`cap add android` yet -- that depends on `capacitor.config.ts` existing.
 
@@ -72,7 +72,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 1.2 Create Capacitor configuration and initialize native platforms
+### 1.2 Create Capacitor configuration and initialize native platforms ✅
 
 **Description**: Create `capacitor.config.ts` at `frontend/` root with appId `com.sasvin.biometria`, webDir pointing to Angular build output. Run `npx cap add ios` and `npx cap add android` to generate native projects. Update `.gitignore` to exclude native build artifacts but KEEP native project config files.
 
@@ -95,7 +95,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 1.3 Create PlatformService for native/browser detection
+### 1.3 Create PlatformService for native/browser detection ✅
 
 **Description**: Create `PlatformService` as a `providedIn: 'root'` injectable with signal-based state. Detects Capacitor native vs browser vs tablet using `Capacitor.isNativePlatform()` and screen heuristics. Exposes `isNative`, `isBrowser`, `isTablet`, `platform` as readonly signals. Includes `jpegQuality()` method returning 0.7 for mobile/tablet and 0.8 for desktop.
 
@@ -117,7 +117,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 1.4 Fix viewport meta, theme-color, and Apple meta tags in index.html
+### 1.4 Fix viewport meta, theme-color, and Apple meta tags in index.html ✅
 
 **Description**: Update `frontend/src/index.html` to include mobile-critical meta tags: viewport-fit=cover, maximum-scale=1 (prevent iOS zoom on input focus), theme-color matching dark theme, apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style, and apple-touch-icon link.
 
@@ -152,7 +152,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 1.5 Fix all 100vh usages to 100dvh across the codebase
+### 1.5 Fix all 100vh usages to 100dvh across the codebase ✅
 
 **Description**: Replace every `100vh` with `100dvh` in all Angular component styles. This fixes the iOS Safari address bar overlap bug. The affected files are kiosk, login, employees, schedules, locations, settings, dashboard, and attendance admin components. Also fix the `calc(100vh - 150px)` in locations to `calc(100dvh - 150px)`.
 
@@ -177,7 +177,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 1.6 Create PWA manifest, icon set, ngsw-config, and wire service worker
+### 1.6 Create PWA manifest, icon set, ngsw-config, and wire service worker ✅
 
 **Description**: Create the PWA infrastructure: manifest.webmanifest, icon placeholder set (72-512px), ngsw-config.json for Angular service worker, and wire everything into angular.json and app.config.ts. Service worker is enabled only in production AND when NOT running in Capacitor.
 

@@ -11,7 +11,8 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { CameraService } from '../../core/services/camera.service';
 import { AttendanceService } from '../../core/services/attendance.service';
-import { GeolocationService, GeoPosition } from '../../core/services/geolocation.service';
+import { GeolocationService } from '../../core/services/geolocation.service';
+import { GeoPosition } from '../../core/models/geolocation.model';
 import { AttendanceRecord } from '../../core/models/attendance.model';
 
 type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
@@ -506,9 +507,11 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.isCheckIn.set(value);
   }
 
-  scan(): void {
-    const image = this.cameraService.captureFrame();
-    if (!image) {
+  async scan(): Promise<void> {
+    // Capture 3 frames with 250ms delay for anti-spoofing
+    const images = await this.cameraService.captureFrames(3, 250);
+    
+    if (!images || images.length === 0) {
       this.errorMessage.set('No se pudo capturar la imagen');
       this.mode.set('error');
       return;
@@ -516,7 +519,7 @@ export class KioskComponent implements OnInit, OnDestroy {
 
     this.mode.set('scanning');
 
-    const request: { image: string; latitude?: number; longitude?: number } = { image };
+    const request: { images: string[]; latitude?: number; longitude?: number } = { images };
 
     if (this.currentPosition) {
       request.latitude = this.currentPosition.latitude;
