@@ -594,7 +594,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 4.3 Implement service worker update strategy for 24/7 kiosk
+### 4.3 Implement service worker update strategy for 24/7 kiosk ✅
 
 **Description**: Add logic to check for service worker updates periodically (every 6 hours) and auto-reload during idle periods. Use Angular's `SwUpdate` service to detect available updates. If kiosk is in `idle` state for > 60 seconds and an update is available, reload the page. During active scan, defer the update.
 

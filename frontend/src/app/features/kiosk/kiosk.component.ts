@@ -799,6 +799,97 @@ export class KioskComponent implements OnInit, OnDestroy {
     }, 5000);
   }
 
+
+  /**
+   * Setup service worker update strategy for 24/7 kiosk mode.
+   * - Checks for updates every 6 hours
+   * - Auto-reloads when idle for > 60 seconds AND update is available
+   * - Defers updates during active scan/success/error states
+   * - No-op in dev mode or Capacitor native
+   */
+  private setupServiceWorkerUpdates(): void {
+    // Skip if in dev mode (service worker not registered)
+    if (isDevMode()) {
+      return;
+    }
+
+    // Skip if running in Capacitor native (service worker disabled)
+    if (this.platformService.isNative()) {
+      return;
+    }
+
+    // Skip if SwUpdate is not available (e.g., service worker disabled)
+    if (!this.swUpdate.isEnabled) {
+      return;
+    }
+
+    // Listen for available updates
+    this.swUpdate.versionUpdates
+      .pipe(
+        filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY')
+      )
+      .subscribe(() => {
+        this.hasUpdateAvailable = true;
+        this.attemptUpdateReload();
+      });
+
+    // Check for updates every 6 hours (6 * 60 * 60 * 1000 ms)
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    this.updateCheckInterval = setInterval(() => {
+      this.swUpdate.checkForUpdate().catch((err) => {
+        console.error('Error checking for service worker update:', err);
+      });
+    }, SIX_HOURS);
+
+    // Initial check on startup
+    this.swUpdate.checkForUpdate().catch((err) => {
+      console.error('Error on initial service worker update check:', err);
+    });
+  }
+
+  /**
+   * Attempt to reload the page if update is available and kiosk is idle.
+   * Only reloads if:
+   * - Update is available
+   * - Kiosk is in idle mode (not scanning/success/error)
+   * - Kiosk has been idle for > 60 seconds
+   */
+  private attemptUpdateReload(): void {
+    if (!this.hasUpdateAvailable) {
+      return;
+    }
+
+    const currentMode = this.mode();
+
+    // If not idle, defer the update
+    if (currentMode !== 'idle') {
+      // Try again after mode changes back to idle
+      setTimeout(() => this.attemptUpdateReload(), 5000);
+      return;
+    }
+
+    // Track idle start time
+    if (this.idleStartTime === null) {
+      this.idleStartTime = Date.now();
+      // Check again after 60 seconds
+      setTimeout(() => this.attemptUpdateReload(), 60000);
+      return;
+    }
+
+    // Check if idle for more than 60 seconds
+    const idleDuration = Date.now() - this.idleStartTime;
+    const SIXTY_SECONDS = 60 * 1000;
+
+    if (idleDuration >= SIXTY_SECONDS) {
+      // Reload to activate the new version
+      document.location.reload();
+    } else {
+      // Wait for remaining idle time
+      const remainingTime = SIXTY_SECONDS - idleDuration;
+      setTimeout(() => this.attemptUpdateReload(), remainingTime);
+    }
+  }
+
   /**
    * Setup orientation change listener for tablets.
    * Shows warning overlay when tablet is in portrait mode.
