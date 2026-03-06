@@ -6,12 +6,15 @@ import {
   signal,
   ViewChild,
   ElementRef,
+  computed,
+  afterNextRender,
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { CameraService } from '../../core/services/camera.service';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { GeolocationService } from '../../core/services/geolocation.service';
+import { PlatformService } from '../../core/services/platform.service';
 import { GeoPosition } from '../../core/models/geolocation.model';
 import { AttendanceRecord } from '../../core/models/attendance.model';
 
@@ -24,6 +27,17 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
   imports: [CommonModule, DatePipe, RouterLink],
   template: `
     <div class="kiosk-container">
+      <!-- Orientation warning overlay for tablets in portrait mode -->
+      @if (showOrientationWarning()) {
+        <div class="orientation-warning-overlay">
+          <div class="orientation-warning-content">
+            <div class="rotate-icon">📱 → 📲</div>
+            <p class="warning-title">Por favor, rota el dispositivo a horizontal</p>
+            <p class="warning-subtitle">Esta aplicación funciona mejor en modo horizontal</p>
+          </div>
+        </div>
+      }
+
       <!-- Header with clock -->
       <header class="kiosk-header">
         <div class="clock">
@@ -449,6 +463,66 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
     .admin-link:hover {
       color: white;
     }
+
+    /* Orientation warning overlay for tablets */
+    .orientation-warning-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 14, 23, 0.98);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      backdrop-filter: blur(8px);
+    }
+
+    .orientation-warning-content {
+      text-align: center;
+      padding: 2rem;
+      max-width: 400px;
+    }
+
+    .rotate-icon {
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
+      animation: rotateDevice 2s ease-in-out infinite;
+    }
+
+    @keyframes rotateDevice {
+      0%, 100% {
+        transform: rotate(0deg);
+      }
+      50% {
+        transform: rotate(90deg);
+      }
+    }
+
+    .warning-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: white;
+    }
+
+    .warning-subtitle {
+      font-size: 1rem;
+      opacity: 0.7;
+      color: white;
+    }
+
+    /* Hide orientation warning on phones (max-width: 600px) */
+    @media (max-width: 600px) {
+      .orientation-warning-overlay {
+        display: none !important;
+      }
+    }
+
+    /* Hide orientation warning on desktop (min-width: 1024px) */
+    @media (min-width: 1024px) {
+      .orientation-warning-overlay {
+        display: none !important;
+      }
+    }
   `],
 })
 export class KioskComponent implements OnInit, OnDestroy {
@@ -460,6 +534,8 @@ export class KioskComponent implements OnInit, OnDestroy {
 
   private clockInterval?: ReturnType<typeof setInterval>;
   private resultTimeout?: ReturnType<typeof setTimeout>;
+  private orientationMediaQuery?: MediaQueryList;
+  private orientationChangeHandler?: () => void;
 
   readonly mode = signal<KioskMode>('idle');
   readonly isCheckIn = signal(true);
@@ -473,9 +549,13 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly geoError = signal<string>('');
   private currentPosition: GeoPosition | null = null;
 
+  // Orientation handling for tablets (screen width > 600px)
+  readonly showOrientationWarning = signal(false);
+
   ngOnInit(): void {
     this.startClock();
     this.requestGeolocation();
+    this.setupOrientationListener();
   }
 
   private requestGeolocation(): void {
@@ -510,6 +590,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     if (this.resultTimeout) {
       clearTimeout(this.resultTimeout);
     }
+    this.cleanupOrientationListener();
     this.cameraService.stop();
   }
 
@@ -596,5 +677,57 @@ export class KioskComponent implements OnInit, OnDestroy {
       this.lastRecord.set(null);
       this.errorMessage.set('');
     }, 5000);
+  }
+
+  /**
+   * Setup orientation change listener for tablets.
+   * Shows warning overlay when tablet is in portrait mode.
+   * Phones (width <= 600px) and desktop (width >= 1024px) are excluded via CSS.
+   */
+  private setupOrientationListener(): void {
+    // Check if device is a tablet (screen width > 600px and < 1024px)
+    const isTablet = window.innerWidth > 600 && window.innerWidth < 1024;
+    
+    if (!isTablet) {
+      // Skip orientation handling on phones and desktop
+      return;
+    }
+
+    // Create MediaQueryList for orientation detection
+    this.orientationMediaQuery = window.matchMedia('(orientation: landscape)');
+    
+    // Initial check
+    this.checkOrientation();
+    
+    // Create handler function
+    this.orientationChangeHandler = () => this.checkOrientation();
+    
+    // Add listener for orientation changes
+    this.orientationMediaQuery.addEventListener('change', this.orientationChangeHandler);
+  }
+
+  /**
+   * Check current orientation and update warning state.
+   * Shows warning if in portrait mode on tablet.
+   */
+  private checkOrientation(): void {
+    if (!this.orientationMediaQuery) {
+      return;
+    }
+
+    const isLandscape = this.orientationMediaQuery.matches;
+    const isTablet = window.innerWidth > 600 && window.innerWidth < 1024;
+    
+    // Show warning if tablet is in portrait mode
+    this.showOrientationWarning.set(isTablet && !isLandscape);
+  }
+
+  /**
+   * Clean up orientation change listener on component destroy.
+   */
+  private cleanupOrientationListener(): void {
+    if (this.orientationMediaQuery && this.orientationChangeHandler) {
+      this.orientationMediaQuery.removeEventListener('change', this.orientationChangeHandler);
+    }
   }
 }
