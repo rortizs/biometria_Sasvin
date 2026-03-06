@@ -378,6 +378,8 @@ export class EmployeesComponent implements OnInit {
   readonly selectedEmployee = signal<Employee | null>(null);
   readonly modalMode = signal<'create' | 'edit'>('create');
   readonly capturedImages = signal<string[]>([]);
+  readonly editMode = signal<boolean>(false);
+  readonly editingEmployeeId = signal<string | null>(null);
 
   @ViewChild('faceVideo') faceVideoRef!: ElementRef<HTMLVideoElement>;
 
