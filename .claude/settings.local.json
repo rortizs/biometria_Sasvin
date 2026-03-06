@@ -12,7 +12,8 @@
       "Bash(alembic upgrade:*)",
       "Bash(pkill:*)",
       "Bash(./venv/bin/pip show:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "mcp__plugin_engram_engram__mem_save"
     ]
   }
 }

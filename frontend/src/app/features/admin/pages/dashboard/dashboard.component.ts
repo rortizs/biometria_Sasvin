@@ -117,7 +117,7 @@ import { Employee } from '../../../../core/models/employee.model';
   `,
   styles: [`
     .dashboard {
-      min-height: 100vh;
+      min-height: 100dvh;
       background: #f3f4f6;
       padding: 2rem;
     }

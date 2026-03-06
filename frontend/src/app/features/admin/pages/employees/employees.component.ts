@@ -205,7 +205,7 @@ import { Location } from '../../../../core/models/location.model';
   `,
   styles: [`
     .employees-page {
-      min-height: 100vh;
+      min-height: 100dvh;
       background: #f3f4f6;
       padding: 2rem;
     }

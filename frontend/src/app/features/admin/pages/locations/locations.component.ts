@@ -127,7 +127,7 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
   `,
   styles: [`
     .locations-page {
-      min-height: 100vh;
+      min-height: 100dvh;
       background: #f3f4f6;
       padding: 2rem;
     }
@@ -155,7 +155,7 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
       display: grid;
       grid-template-columns: 350px 1fr;
       gap: 2rem;
-      height: calc(100vh - 150px);
+      height: calc(100dvh - 150px);
     }
 
     .locations-list {

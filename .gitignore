@@ -28,6 +28,11 @@ yarn-error.log
 frontend/dist/
 frontend/.angular/
 
+# Capacitor native build artifacts
+frontend/ios/App/Pods/
+frontend/android/.gradle/
+frontend/android/app/build/
+
 # IDE
 .idea/
 .vscode/

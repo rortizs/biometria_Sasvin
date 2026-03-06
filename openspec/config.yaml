@@ -1,0 +1,39 @@
+schema: spec-driven
+
+context: |
+  Project: biometria_Sasvin — Sistema de control de asistencia biométrica facial
+  Backend: FastAPI + SQLAlchemy async + PostgreSQL + PostGIS + Redis
+  Frontend: Angular 20 (standalone components, signals) + Leaflet
+  Auth: JWT (python-jose + passlib)
+  Face: face_recognition lib, embeddings as FLOAT8[], anti-spoofing via OpenCV + ONNX
+  Infra: Docker Compose (db, redis, backend); Alembic for migrations
+  Testing: pytest + pytest-asyncio + httpx (backend), Karma/Jasmine (frontend)
+  Arch: Features-based Angular (core/features/shared), FastAPI router + models/schemas/services
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes (migrations, security, face pipeline)
+    - Identify affected modules (backend routes, models, frontend features)
+    - Flag biometric/security implications explicitly
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+    - Cover happy path + edge cases (bad face, no GPS, spoofing attempt)
+  design:
+    - Include sequence diagrams for face recognition and anti-spoofing flows
+    - Document architecture decisions with rationale
+    - PostGIS spatial queries MUST document index strategy
+  tasks:
+    - Group tasks by phase (migrations, backend, frontend, tests)
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow existing code patterns (async SQLAlchemy, Pydantic v2 schemas)
+    - Load angular-expert skill for frontend work
+    - Load django-drf/pytest skills for backend work
+  verify:
+    - Run pytest for backend, ng test for frontend
+    - Compare implementation against every spec scenario
+    - Security scenarios (JWT, face spoofing) MUST be verified
+  archive:
+    - Warn before merging destructive deltas (model changes, migration drops)

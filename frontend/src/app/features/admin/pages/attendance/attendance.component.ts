@@ -258,7 +258,7 @@ interface AttendanceSummary {
   `,
   styles: [`
     .attendance-page {
-      min-height: 100vh;
+      min-height: 100dvh;
       background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
       padding: 1.5rem 2rem;
     }

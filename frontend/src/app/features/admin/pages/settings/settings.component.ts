@@ -97,7 +97,7 @@ import { Settings, SettingsUpdate } from '../../../../core/models/settings.model
   `,
   styles: [`
     .settings-page {
-      min-height: 100vh;
+      min-height: 100dvh;
       background: #f3f4f6;
       padding: 2rem;
     }
