@@ -215,7 +215,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ## Phase 2: Camera & Geolocation Hardening (Days 5-8, March 8-11)
 
-### 2.1 Harden CameraService: resolution fallback chain
+### 2.1 Harden CameraService: resolution fallback chain ✅
 
 **Description**: Modify `CameraService.start()` to use a resolution fallback chain instead of a single `getUserMedia` call. Try 1280x960 -> 960x720 -> 640x480 -> unconstrained (facingMode only). Also set `playsinline`, `muted`, and `autoplay` attributes programmatically on the video element.
 
@@ -240,7 +240,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.2 Harden CameraService: canvas scaling and JPEG quality cap
+### 2.2 Harden CameraService: canvas scaling and JPEG quality cap ✅
 
 **Description**: Modify `captureFrame()` to scale down the canvas when video resolution exceeds `maxCaptureWidth` (1280px default). Apply platform-appropriate JPEG quality (0.7 mobile, 0.8 desktop) via `PlatformService.jpegQuality()`. This ensures each frame is ~100-200KB instead of 2-4MB on 4K phone cameras.
 
@@ -264,7 +264,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.3 Harden CameraService: visibility change handler and double-tap guard
+### 2.3 Harden CameraService: visibility change handler and double-tap guard ✅
 
 **Description**: Add `document.visibilitychange` listener that pauses (stops tracks) the camera when the tab/app is hidden and resumes (re-acquires stream) when visible. Add `capturing` signal as a guard against double-tap on `captureFrames()`. Add `captureFrames(count, delayMs)` method if not present (currently only `captureFrame()` exists -- the kiosk component builds multi-frame logic inline). Also add Capacitor `App.addListener('appStateChange')` when `isNative()`.
 
@@ -287,7 +287,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.4 Create GeoError model and typed error responses
+### 2.4 Create GeoError model and typed error responses ✅
 
 **Description**: Create `GeoError` class in a new models file. The class extends `Error` with `code` (PERMISSION_DENIED, POSITION_UNAVAILABLE, TIMEOUT, NOT_SUPPORTED) and `hint` (user-facing action text in Spanish). Also create `GeoConfig` interface.
 
@@ -307,7 +307,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.5 Harden GeolocationService: Capacitor bridge and permission checking
+### 2.5 Harden GeolocationService: Capacitor bridge and permission checking ✅
 
 **Description**: Refactor `GeolocationService` to use `@capacitor/geolocation` when `PlatformService.isNative()` is true and browser API otherwise. Add `checkPermission()` method using `navigator.permissions.query` (browser) or Capacitor `Geolocation.checkPermissions()` (native). Replace silent `null` returns with `GeoError` typed errors. Update `maximumAge` to 5000ms and `timeout` to 15000ms.
 
@@ -333,7 +333,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.6 Add GPS acquisition state signal to GeolocationService
+### 2.6 Add GPS acquisition state signal to GeolocationService ✅
 
 **Description**: Expose a `state` signal on `GeolocationService` with values `'idle' | 'acquiring' | 'acquired' | 'error'` so the UI can show "Obteniendo ubicacion..." feedback. Also expose `lastPosition` and `lastError` signals.
 
@@ -354,7 +354,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.7 Update backend AttendanceCheckIn schema to accept images[]
+### 2.7 Update backend AttendanceCheckIn schema to accept images[] ✅
 
 **Description**: Modify `AttendanceCheckIn` and `AttendanceCheckOut` Pydantic schemas to accept `images: list[str]` instead of (or in addition to) `image: str`. Add a `model_validator` for backward compatibility that wraps a single `image` into `images`. Update the `/check-in` and `/check-out` endpoint handlers to use `request.images[0]` (first frame) for face embedding extraction.
 
@@ -376,7 +376,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.8 Verify face_recognition tolerance with capped resolution images
+### 2.8 Verify face_recognition tolerance with capped resolution images ✅
 
 **Description**: Test that the `face_recognition` library's `get_face_embedding()` and `find_best_match()` work correctly with 1280px-capped JPEG images at quality 0.7. The library internally scales to 150px for HOG detection, so 1280px should be fine. Write a quick verification script or test that encodes a known face at both full resolution and 1280px, then confirms the embeddings produce a match within tolerance.
 
@@ -395,7 +395,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.9 Fix EmployeesComponent to use CameraService instead of direct getUserMedia
+### 2.9 Fix EmployeesComponent to use CameraService instead of direct getUserMedia ✅
 
 **Description**: The `EmployeesComponent` (face registration modal) uses `navigator.mediaDevices.getUserMedia` directly at line 524 with hardcoded 640x480 instead of going through `CameraService`. Refactor to inject and use `CameraService.start()` so it benefits from the resolution fallback chain and canvas scaling.
 
@@ -415,7 +415,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 2.10 Update frontend AttendanceCheckInRequest to use images[]
+### 2.10 Update frontend AttendanceCheckInRequest to use images[] ✅
 
 **Description**: Update the `AttendanceCheckInRequest` interface in the attendance model to use `images: string[]` instead of `image: string`. Update the KioskComponent and AttendanceService to send the array of frames from `captureFrames()` in the `images` field.
 
@@ -438,7 +438,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ## Phase 3: Mobile App Flow (Days 9-12, March 12-15)
 
-### 3.1 Create AttendanceScanComponent for mobile face scan
+### 3.1 Create AttendanceScanComponent for mobile face scan ✅
 
 **Description**: Create the main mobile attendance screen. Layout: camera preview (top ~60%), face guide overlay (oval), instruction text, GPS status indicator, and scan action button. Uses `CameraService` for live stream and `GeolocationService` for GPS. Portrait-optimized for phones. All touch targets >= 48px.
 
@@ -461,7 +461,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 3.2 Add success/error result overlay to AttendanceScanComponent
+### 3.2 Add success/error result overlay to AttendanceScanComponent ✅
 
 **Description**: After a scan attempt, display a fullscreen overlay with the result. Success: employee name, ENTRADA/SALIDA, timestamp, green indicator, auto-dismiss after 5s. Anti-spoofing rejection: red indicator, Spanish message, auto-dismiss after 4s. Face not recognized: message, auto-dismiss 4s. Network error: message, auto-dismiss 5s.
 
@@ -482,7 +482,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 3.3 Add /attendance route and integrate Capacitor App lifecycle
+### 3.3 Add /attendance route and integrate Capacitor App lifecycle ✅
 
 **Description**: Add the `/attendance` route to `app.routes.ts` with lazy loading for `AttendanceScanComponent`. Integrate `@capacitor/app` lifecycle events: when `isNative()`, listen for `appStateChange` to pause/resume camera. Configure splash screen auto-hide.
 
@@ -504,7 +504,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 3.4 Apply touch target audit and fixes on kiosk component
+### 3.4 Apply touch target audit and fixes on kiosk component ✅
 
 **Description**: Audit all interactive elements in `KioskComponent` and ensure minimum 44x44px touch targets (Apple HIG). Fix the "Marcar Entrada/Salida" button, special marking option buttons, and admin footer link. Add padding where needed without breaking desktop layout.
 
@@ -524,7 +524,7 @@ npm install @capacitor/core @capacitor/cli @capacitor/geolocation @capacitor/app
 
 ---
 
-### 3.5 Update KioskComponent to use CameraService.captureFrames()
+### 3.5 Update KioskComponent to use CameraService.captureFrames() ✅
 
 **Description**: The kiosk component likely implements its own multi-frame capture logic (capturing frames with delays). Refactor to use the new `CameraService.captureFrames(3, 250)` method and the `capturing` signal for button state. This centralizes the capture logic.
 

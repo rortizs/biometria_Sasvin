@@ -115,7 +115,18 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
         <div class="instructions">
           @if (mode() === 'idle') {
             <p>Posicione su rostro frente a la cámara</p>
-            <button class="scan-btn" (click)="scan()">Marcar Asistencia</button>
+            <button 
+              class="scan-btn" 
+              [disabled]="cameraService.capturing()"
+              (click)="scan()"
+            >
+              @if (cameraService.capturing()) {
+                <span class="button-spinner"></span>
+                Capturando...
+              } @else {
+                Marcar Asistencia
+              }
+            </button>
           }
         </div>
       </main>
@@ -340,6 +351,9 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
     }
 
     .mode-btn {
+      /* Touch target: min 44x44px for tablets */
+      min-height: 44px;
+      min-width: 44px;
       padding: 0.75rem 2rem;
       font-size: 1rem;
       font-weight: 500;
@@ -370,6 +384,9 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
     }
 
     .scan-btn {
+      /* Touch target: min 44x44px for tablets */
+      min-height: 44px;
+      min-width: 44px;
       padding: 1rem 3rem;
       font-size: 1.2rem;
       font-weight: 600;
@@ -379,15 +396,34 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
       border-radius: 0.5rem;
       cursor: pointer;
       transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
     }
 
-    .scan-btn:hover {
+    .scan-btn:hover:not(:disabled) {
       background: #2563eb;
       transform: scale(1.02);
     }
 
-    .scan-btn:active {
+    .scan-btn:active:not(:disabled) {
       transform: scale(0.98);
+    }
+
+    .scan-btn:disabled {
+      background: rgba(59, 130, 246, 0.5);
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+
+    .button-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
     }
 
     .kiosk-footer {
@@ -397,9 +433,17 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
     }
 
     .admin-link {
+      /* Touch target: min 44x44px via padding */
+      display: inline-block;
+      min-height: 44px;
+      min-width: 44px;
+      padding: 0.75rem 1rem;
       color: rgba(255, 255, 255, 0.5);
       text-decoration: none;
       font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .admin-link:hover {
@@ -410,7 +454,7 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
 export class KioskComponent implements OnInit, OnDestroy {
   @ViewChild('videoElement') videoElement!: ElementRef<HTMLVideoElement>;
 
-  private readonly cameraService = inject(CameraService);
+  readonly cameraService = inject(CameraService);
   private readonly attendanceService = inject(AttendanceService);
   private readonly geolocationService = inject(GeolocationService);
 

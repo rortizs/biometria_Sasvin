@@ -13,6 +13,13 @@ export const routes: Routes = [
       import('./features/kiosk/kiosk.component').then((m) => m.KioskComponent),
   },
   {
+    path: 'attendance',
+    loadComponent: () =>
+      import('./features/attendance/attendance-scan.component').then(
+        (m) => m.AttendanceScanComponent
+      ),
+  },
+  {
     path: 'auth',
     canActivate: [guestGuard],
     children: [
