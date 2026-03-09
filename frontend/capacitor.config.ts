@@ -5,9 +5,10 @@ const config: CapacitorConfig = {
   appName: 'Sasvin Biometrico',
   webDir: 'dist/frontend/browser',
   server: {
-    // For development: proxy to local backend
-    // url: 'http://192.168.1.X:4200',
-    // cleartext: true,
+    // Beta: Remote URL — native app loads web from production server
+    // Remove this before app store submission (use bundled build instead)
+    url: 'https://biometria.sistemaslab.dev',
+    cleartext: false,
   },
   plugins: {
     SplashScreen: {
