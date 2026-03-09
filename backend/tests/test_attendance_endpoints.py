@@ -24,10 +24,42 @@ from app.models.location import Location
 from app.models.attendance import AttendanceRecord
 
 
+def mock_db_execute_result(return_values: list):
+    """
+    Helper to mock db.execute() with multiple queries.
+
+    Args:
+        return_values: List of values to return from scalar_one_or_none() calls
+
+    Returns:
+        Side effect list for mock_db.execute
+    """
+    results = []
+    for value in return_values:
+        mock_result = MagicMock()
+        # scalar_one_or_none() is a sync method that returns the value directly in SQLAlchemy 2.0 async
+        mock_result.scalar_one_or_none.return_value = value
+        results.append(mock_result)
+    return results
+
+
 @pytest.fixture
 def mock_db():
     """Create mock async database session."""
-    return AsyncMock(spec=AsyncSession)
+    mock = AsyncMock(spec=AsyncSession)
+
+    # Mock common db methods
+    mock.add = MagicMock()
+    mock.commit = AsyncMock()
+
+    # Mock refresh to set ID if not present
+    async def mock_refresh(obj):
+        if not hasattr(obj, "id") or obj.id is None:
+            obj.id = uuid4()
+
+    mock.refresh = AsyncMock(side_effect=mock_refresh)
+
+    return mock
 
 
 @pytest.fixture
@@ -97,13 +129,14 @@ class TestCheckInEndpoint:
                 0.2,
                 0.3,
             ]  # Mock embedding
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database queries
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,  # Location query
-                None,  # No existing attendance record
-            ]
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result([mock_location, None])
+            )
 
             # Act
             response = await check_in(mock_db, request)
@@ -134,13 +167,14 @@ class TestCheckInEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,
-                None,
-            ]
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result([mock_location, None])
+            )
 
             # Act
             response = await check_in(mock_db, request)
@@ -182,7 +216,7 @@ class TestCheckInEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = None  # No match
+            mock_face_service.find_best_match = AsyncMock(return_value=None)  # No match
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -228,10 +262,12 @@ class TestCheckInEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database
-            mock_db.execute.return_value.scalar_one_or_none.return_value = None
+            mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None]))
 
             # Act
             response = await check_in(mock_db, request)
@@ -256,13 +292,14 @@ class TestCheckInEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,  # Location found
-                None,  # No existing record
-            ]
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result([mock_location, None])
+            )
 
             # Act
             response = await check_in(mock_db, request)
@@ -293,13 +330,16 @@ class TestCheckInEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database - existing record found
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,
-                mock_attendance_record,  # Existing attendance
-            ]
+            # No GPS coordinates, so _validate_geo doesn't call db.execute
+            # Only the attendance record query is executed
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result([mock_attendance_record])
+            )
 
             # Act
             response = await check_in(mock_db, request)
@@ -332,13 +372,16 @@ class TestCheckOutEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,
-                mock_attendance_record,  # Existing check-in
-            ]
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result(
+                    [mock_location, mock_attendance_record]
+                )
+            )
 
             # Act
             response = await check_out(mock_db, request)
@@ -365,13 +408,14 @@ class TestCheckOutEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database - no existing record
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,
-                None,  # No attendance record
-            ]
+            # No GPS coordinates, so _validate_geo doesn't call db.execute
+            # Only the attendance record query is executed
+            mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None]))
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
@@ -399,13 +443,16 @@ class TestCheckOutEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,
-                mock_attendance_record,
-            ]
+            # No GPS coordinates, so _validate_geo doesn't call db.execute
+            # Only the attendance record query is executed
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result([mock_attendance_record])
+            )
 
             # Act
             response = await check_out(mock_db, request)
@@ -434,13 +481,16 @@ class TestCheckOutEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.find_best_match.return_value = (mock_employee, 0.95)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
 
             # Mock database
-            mock_db.execute.return_value.scalar_one_or_none.side_effect = [
-                mock_location,
-                mock_attendance_record,
-            ]
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result(
+                    [mock_location, mock_attendance_record]
+                )
+            )
 
             # Act
             response = await check_out(mock_db, request)
