@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://api-biometria.sistemaslab.dev/api/v1',
+  apiUrl: '/api/v1',  // Usa proxy de nginx (ver frontend/nginx.conf)
 };
