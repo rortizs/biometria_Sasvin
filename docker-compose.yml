@@ -37,11 +37,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: biometria_frontend
-    ports:
-      - "80:80"
     depends_on:
       - backend
     restart: unless-stopped
+    # Nota: No exponer puertos en Dokploy - Traefik se encarga del routing
 
 volumes:
   postgres_data:
