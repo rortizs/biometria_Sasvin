@@ -7,24 +7,41 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin, get_current_active_user
-from app.models.schedule import Schedule, EmployeeSchedule, ScheduleAssignment, ScheduleException, ExceptionType
+from app.api.deps import get_db, get_current_active_admin, get_current_user
+from app.models.schedule import (
+    Schedule,
+    EmployeeSchedule,
+    ScheduleAssignment,
+    ScheduleException,
+    ExceptionType,
+)
 from app.models.employee import Employee
 from app.models.department import Department
 from app.models.user import User
 from app.schemas.schedule import (
-    ScheduleCreate, ScheduleUpdate, ScheduleResponse,
-    EmployeeScheduleCreate, EmployeeScheduleResponse,
-    ScheduleAssignmentCreate, ScheduleAssignmentUpdate, ScheduleAssignmentResponse,
-    ScheduleExceptionCreate, ScheduleExceptionUpdate, ScheduleExceptionResponse,
+    ScheduleCreate,
+    ScheduleUpdate,
+    ScheduleResponse,
+    EmployeeScheduleCreate,
+    EmployeeScheduleResponse,
+    ScheduleAssignmentCreate,
+    ScheduleAssignmentUpdate,
+    ScheduleAssignmentResponse,
+    ScheduleExceptionCreate,
+    ScheduleExceptionUpdate,
+    ScheduleExceptionResponse,
     BulkAssignmentCreate,
-    CalendarResponse, EmployeeCalendarRow, CalendarDayInfo, ExceptionTypeEnum
+    CalendarResponse,
+    EmployeeCalendarRow,
+    CalendarDayInfo,
+    ExceptionTypeEnum,
 )
 
 router = APIRouter()
 
 
 # ==================== SCHEDULE PATTERNS ====================
+
 
 @router.get("/patterns", response_model=list[ScheduleResponse])
 async def list_schedule_patterns(
@@ -51,11 +68,15 @@ async def get_schedule_pattern(
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule pattern not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule pattern not found"
+        )
     return pattern
 
 
-@router.post("/patterns", response_model=ScheduleResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/patterns", response_model=ScheduleResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
@@ -64,7 +85,10 @@ async def create_schedule_pattern(
     """Create a new schedule pattern (admin only)."""
     result = await db.execute(select(Schedule).where(Schedule.name == pattern_in.name))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pattern with this name already exists")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pattern with this name already exists",
+        )
 
     pattern = Schedule(**pattern_in.model_dump())
     db.add(pattern)
@@ -84,7 +108,9 @@ async def update_schedule_pattern(
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule pattern not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule pattern not found"
+        )
 
     update_data = pattern_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -105,12 +131,15 @@ async def delete_schedule_pattern(
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule pattern not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Schedule pattern not found"
+        )
     await db.delete(pattern)
     await db.commit()
 
 
 # ==================== SCHEDULE ASSIGNMENTS ====================
+
 
 @router.get("/assignments", response_model=list[ScheduleAssignmentResponse])
 async def list_assignments(
@@ -134,7 +163,11 @@ async def list_assignments(
     return result.scalars().all()
 
 
-@router.post("/assignments", response_model=ScheduleAssignmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/assignments",
+    response_model=ScheduleAssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
@@ -146,7 +179,7 @@ async def create_assignment(
         select(ScheduleAssignment).where(
             and_(
                 ScheduleAssignment.employee_id == assignment_in.employee_id,
-                ScheduleAssignment.assignment_date == assignment_in.assignment_date
+                ScheduleAssignment.assignment_date == assignment_in.assignment_date,
             )
         )
     )
@@ -154,7 +187,9 @@ async def create_assignment(
 
     if existing:
         # Update existing assignment
-        update_data = assignment_in.model_dump(exclude={'employee_id', 'assignment_date'})
+        update_data = assignment_in.model_dump(
+            exclude={"employee_id", "assignment_date"}
+        )
         for field, value in update_data.items():
             setattr(existing, field, value)
         await db.commit()
@@ -162,7 +197,9 @@ async def create_assignment(
         return existing
 
     # Create new assignment
-    assignment = ScheduleAssignment(**assignment_in.model_dump(), created_by=current_user.id)
+    assignment = ScheduleAssignment(
+        **assignment_in.model_dump(), created_by=current_user.id
+    )
     db.add(assignment)
     await db.commit()
     await db.refresh(assignment)
@@ -185,7 +222,7 @@ async def create_bulk_assignments(
                 select(ScheduleAssignment).where(
                     and_(
                         ScheduleAssignment.employee_id == emp_id,
-                        ScheduleAssignment.assignment_date == assignment_date
+                        ScheduleAssignment.assignment_date == assignment_date,
                     )
                 )
             )
@@ -201,7 +238,7 @@ async def create_bulk_assignments(
                     assignment_date=assignment_date,
                     schedule_id=bulk_in.schedule_id,
                     is_day_off=bulk_in.is_day_off,
-                    created_by=current_user.id
+                    created_by=current_user.id,
                 )
                 db.add(assignment)
                 created_count += 1
@@ -217,15 +254,20 @@ async def delete_assignment(
     assignment_id: UUID,
 ) -> None:
     """Delete a schedule assignment."""
-    result = await db.execute(select(ScheduleAssignment).where(ScheduleAssignment.id == assignment_id))
+    result = await db.execute(
+        select(ScheduleAssignment).where(ScheduleAssignment.id == assignment_id)
+    )
     assignment = result.scalar_one_or_none()
     if not assignment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found"
+        )
     await db.delete(assignment)
     await db.commit()
 
 
 # ==================== SCHEDULE EXCEPTIONS ====================
+
 
 @router.get("/exceptions", response_model=list[ScheduleExceptionResponse])
 async def list_exceptions(
@@ -240,7 +282,10 @@ async def list_exceptions(
 
     if employee_id:
         query = query.where(
-            or_(ScheduleException.employee_id == employee_id, ScheduleException.employee_id == None)
+            or_(
+                ScheduleException.employee_id == employee_id,
+                ScheduleException.employee_id == None,
+            )
         )
     if exception_type:
         query = query.where(ScheduleException.exception_type == exception_type)
@@ -254,14 +299,20 @@ async def list_exceptions(
     return result.scalars().all()
 
 
-@router.post("/exceptions", response_model=ScheduleExceptionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/exceptions",
+    response_model=ScheduleExceptionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     exception_in: ScheduleExceptionCreate,
 ) -> ScheduleException:
     """Create a schedule exception (vacation, holiday, sick leave, etc.)."""
-    exception = ScheduleException(**exception_in.model_dump(), created_by=current_user.id)
+    exception = ScheduleException(
+        **exception_in.model_dump(), created_by=current_user.id
+    )
     db.add(exception)
     await db.commit()
     await db.refresh(exception)
@@ -276,10 +327,14 @@ async def update_exception(
     exception_in: ScheduleExceptionUpdate,
 ) -> ScheduleException:
     """Update a schedule exception."""
-    result = await db.execute(select(ScheduleException).where(ScheduleException.id == exception_id))
+    result = await db.execute(
+        select(ScheduleException).where(ScheduleException.id == exception_id)
+    )
     exception = result.scalar_one_or_none()
     if not exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exception not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Exception not found"
+        )
 
     update_data = exception_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -297,20 +352,25 @@ async def delete_exception(
     exception_id: UUID,
 ) -> None:
     """Delete a schedule exception."""
-    result = await db.execute(select(ScheduleException).where(ScheduleException.id == exception_id))
+    result = await db.execute(
+        select(ScheduleException).where(ScheduleException.id == exception_id)
+    )
     exception = result.scalar_one_or_none()
     if not exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exception not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Exception not found"
+        )
     await db.delete(exception)
     await db.commit()
 
 
 # ==================== CALENDAR VIEW ====================
 
+
 @router.get("/calendar", response_model=CalendarResponse)
 async def get_calendar(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
     start_date: date = Query(..., description="Start date of the calendar view"),
     end_date: date = Query(..., description="End date of the calendar view"),
     department_id: UUID | None = None,
@@ -330,7 +390,9 @@ async def get_calendar(
     employees = emp_result.scalars().all()
 
     # Get all schedule patterns
-    patterns_result = await db.execute(select(Schedule).where(Schedule.is_active == True))
+    patterns_result = await db.execute(
+        select(Schedule).where(Schedule.is_active == True)
+    )
     patterns = {p.id: p for p in patterns_result.scalars().all()}
 
     # Get departments for display
@@ -342,7 +404,7 @@ async def get_calendar(
         select(ScheduleAssignment).where(
             and_(
                 ScheduleAssignment.assignment_date >= start_date,
-                ScheduleAssignment.assignment_date <= end_date
+                ScheduleAssignment.assignment_date <= end_date,
             )
         )
     )
@@ -356,7 +418,7 @@ async def get_calendar(
         select(ScheduleException).where(
             and_(
                 ScheduleException.end_date >= start_date,
-                ScheduleException.start_date <= end_date
+                ScheduleException.start_date <= end_date,
             )
         )
     )
@@ -367,7 +429,10 @@ async def get_calendar(
     default_schedules = {}
     for ds in default_schedules_result.scalars().all():
         key = (ds.employee_id, ds.day_of_week)
-        if key not in default_schedules or ds.effective_from > default_schedules[key].effective_from:
+        if (
+            key not in default_schedules
+            or ds.effective_from > default_schedules[key].effective_from
+        ):
             default_schedules[key] = ds
 
     # Build calendar response
@@ -401,7 +466,9 @@ async def get_calendar(
                         break
 
             if exception_found:
-                day_info.exception_type = ExceptionTypeEnum(exception_found.exception_type.value)
+                day_info.exception_type = ExceptionTypeEnum(
+                    exception_found.exception_type.value
+                )
                 day_info.exception_description = exception_found.description
                 if exception_found.has_work_hours:
                     day_info.check_in = exception_found.work_check_in
@@ -450,15 +517,15 @@ async def get_calendar(
             employee_code=emp.employee_code,
             first_name=emp.first_name,
             last_name=emp.last_name,
-            department_name=departments.get(emp.department_id) if emp.department_id else None,
+            department_name=departments.get(emp.department_id)
+            if emp.department_id
+            else None,
             default_schedule_id=default_pattern_id,
             default_schedule_name=default_pattern_name,
-            days=days
+            days=days,
         )
         calendar_rows.append(row)
 
     return CalendarResponse(
-        start_date=start_date,
-        end_date=end_date,
-        employees=calendar_rows
+        start_date=start_date, end_date=end_date, employees=calendar_rows
     )
