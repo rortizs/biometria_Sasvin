@@ -1,0 +1,31 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-biometria}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-biometria_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-biometria_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biometria"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://biometria:biometria_secret@db:5432/biometria_db
+      CORS_ORIGINS: https://asistencia.sistemaslab.dev
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
