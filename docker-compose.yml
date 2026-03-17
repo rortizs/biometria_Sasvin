@@ -1,6 +1,17 @@
 version: "3.8"
 
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: biometria_frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - biometria-network
+
   db:
     image: pgvector/pgvector:pg16
     container_name: biometria_db
@@ -17,6 +28,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - biometria-network
 
   backend:
     build:
@@ -31,16 +44,12 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - biometria-network
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: biometria_frontend
-    depends_on:
-      - backend
-    restart: unless-stopped
-    # Nota: No exponer puertos en Dokploy - Traefik se encarga del routing
+networks:
+  biometria-network:
+    driver: bridge
 
 volumes:
   postgres_data:
