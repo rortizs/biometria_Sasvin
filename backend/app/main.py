@@ -45,6 +45,11 @@ async def health_check():
     return {"status": "healthy", "app": settings.app_name}
 
 
+@app.get("/api/v1/health")
+async def api_health_check():
+    return {"status": "healthy", "app": settings.app_name}
+
+
 @app.get("/")
 async def root():
     return {
