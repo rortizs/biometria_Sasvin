@@ -81,6 +81,20 @@ export const routes: Routes = [
             (m) => m.SchedulesComponent
           ),
       },
+      {
+        path: 'departments',
+        loadComponent: () =>
+          import('./features/admin/pages/departments/departments.component').then(
+            (m) => m.DepartmentsComponent
+          ),
+      },
+      {
+        path: 'positions',
+        loadComponent: () =>
+          import('./features/admin/pages/positions/positions.component').then(
+            (m) => m.PositionsComponent
+          ),
+      },
     ],
   },
   {
