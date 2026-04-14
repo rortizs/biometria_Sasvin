@@ -72,6 +72,16 @@ import { Employee } from '../../../../core/models/employee.model';
           <h3>Horarios</h3>
           <p>Calendario y patrones de horarios</p>
         </a>
+        <a routerLink="/admin/departments" class="nav-card">
+          <div class="nav-icon">🏛️</div>
+          <h3>Departamentos</h3>
+          <p>Gestionar facultades y departamentos</p>
+        </a>
+        <a routerLink="/admin/positions" class="nav-card">
+          <div class="nav-icon">🎓</div>
+          <h3>Puestos</h3>
+          <p>Gestionar cargos y puestos</p>
+        </a>
         <a routerLink="/admin/settings" class="nav-card">
           <div class="nav-icon">⚙️</div>
           <h3>Configuración</h3>
