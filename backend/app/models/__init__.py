@@ -1,8 +1,15 @@
 from app.models.user import User
 from app.models.employee import Employee
 from app.models.face_embedding import FaceEmbedding
+from app.models.biometric_face_session import BiometricFaceSession
 from app.models.attendance import AttendanceRecord
-from app.models.schedule import Schedule, EmployeeSchedule, ScheduleAssignment, ScheduleException, ExceptionType
+from app.models.schedule import (
+    Schedule,
+    EmployeeSchedule,
+    ScheduleAssignment,
+    ScheduleException,
+    ExceptionType,
+)
 from app.models.device import Device
 from app.models.settings import Settings
 from app.models.position import Position
@@ -24,4 +31,5 @@ __all__ = [
     "Position",
     "Department",
     "Location",
+    "BiometricFaceSession",
 ]
