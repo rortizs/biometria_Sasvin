@@ -55,6 +55,11 @@ class Employee(Base):
     attendance_records: Mapped[list["AttendanceRecord"]] = relationship(
         "AttendanceRecord", back_populates="employee", cascade="all, delete-orphan"
     )
+    biometric_face_sessions: Mapped[list["BiometricFaceSession"]] = relationship(
+        "BiometricFaceSession",
+        back_populates="employee",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def full_name(self) -> str:

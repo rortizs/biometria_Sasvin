@@ -17,7 +17,7 @@ sys.path.insert(0, "/app")  # For Docker container
 # sys.path.insert(0, '.')    # For local development
 
 from app.models.user import User
-from app.models.base import Base
+from app.db.base import Base
 
 # Database URL - adjust as needed
 DATABASE_URL = (
@@ -57,8 +57,7 @@ async def create_admin():
             # Create admin user
             admin = User(
                 email="admin@sistemaslab.dev",
-                username="admin",
-                password_hash=password_hash.decode("utf-8"),
+                hashed_password=password_hash.decode("utf-8"),
                 full_name="System Administrator",
                 role="admin",
                 is_active=True,
