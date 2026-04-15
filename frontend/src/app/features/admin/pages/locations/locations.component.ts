@@ -38,6 +38,9 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
                 <span class="radius">Radio: {{ location.radius_meters }}m</span>
               </div>
               <div class="card-actions">
+                <button class="btn btn-sm btn-secondary" (click)="openEditModal(location, $event)">
+                  Editar
+                </button>
                 <button class="btn btn-sm btn-danger" (click)="deleteLocation(location, $event)">
                   Eliminar
                 </button>
@@ -77,7 +80,9 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
                     type="number"
                     [(ngModel)]="formData.latitude"
                     name="latitude"
-                    step="0.0001"
+                    step="any"
+                    min="-90"
+                    max="90"
                     required
                   />
                 </div>
@@ -87,7 +92,9 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
                     type="number"
                     [(ngModel)]="formData.longitude"
                     name="longitude"
-                    step="0.0001"
+                    step="any"
+                    min="-180"
+                    max="180"
                     required
                   />
                 </div>
@@ -346,6 +353,7 @@ export class LocationsComponent implements OnInit, AfterViewInit {
   readonly showModal = signal(false);
   readonly editMode = signal(false);
 
+  private editingId: string | null = null;
   private map: L.Map | null = null;
   private modalMap: L.Map | null = null;
   private markers: L.Marker[] = [];
@@ -431,6 +439,21 @@ export class LocationsComponent implements OnInit, AfterViewInit {
     }
   }
 
+  openEditModal(location: Location, event: Event): void {
+    event.stopPropagation();
+    this.editMode.set(true);
+    this.editingId = location.id;
+    this.formData = {
+      name: location.name,
+      address: location.address || '',
+      latitude: location.latitude,
+      longitude: location.longitude,
+      radius_meters: location.radius_meters,
+    };
+    this.showModal.set(true);
+    setTimeout(() => this.initModalMap(), 100);
+  }
+
   openCreateModal(): void {
     this.editMode.set(false);
     this.formData = {
@@ -465,19 +488,20 @@ export class LocationsComponent implements OnInit, AfterViewInit {
 
     this.modalMarker.on('dragend', () => {
       const pos = this.modalMarker!.getLatLng();
-      this.formData.latitude = pos.lat;
-      this.formData.longitude = pos.lng;
+      this.formData.latitude = Math.round(pos.lat * 1000000) / 1000000;
+      this.formData.longitude = Math.round(pos.lng * 1000000) / 1000000;
     });
 
     this.modalMap.on('click', (e: L.LeafletMouseEvent) => {
-      this.formData.latitude = e.latlng.lat;
-      this.formData.longitude = e.latlng.lng;
+      this.formData.latitude = Math.round(e.latlng.lat * 1000000) / 1000000;
+      this.formData.longitude = Math.round(e.latlng.lng * 1000000) / 1000000;
       this.modalMarker?.setLatLng(e.latlng);
     });
   }
 
   closeModal(): void {
     this.showModal.set(false);
+    this.editingId = null;
     if (this.modalMap) {
       this.modalMap.remove();
       this.modalMap = null;
@@ -485,15 +509,27 @@ export class LocationsComponent implements OnInit, AfterViewInit {
   }
 
   saveLocation(): void {
-    this.locationService.createLocation(this.formData).subscribe({
-      next: () => {
-        this.closeModal();
-        this.loadLocations();
-      },
-      error: (err) => {
-        alert(err.error?.detail || 'Error al crear sede');
-      },
-    });
+    const handleError = (err: any) => {
+      const detail = err.error?.detail;
+      if (Array.isArray(detail)) {
+        const messages = detail.map((e: any) => `${e.loc?.slice(-1)[0]}: ${e.msg}`).join('\n');
+        alert(messages);
+      } else {
+        alert(detail || 'Error al guardar sede');
+      }
+    };
+
+    if (this.editMode() && this.editingId) {
+      this.locationService.updateLocation(this.editingId, this.formData).subscribe({
+        next: () => { this.closeModal(); this.loadLocations(); },
+        error: handleError,
+      });
+    } else {
+      this.locationService.createLocation(this.formData).subscribe({
+        next: () => { this.closeModal(); this.loadLocations(); },
+        error: handleError,
+      });
+    }
   }
 
   deleteLocation(location: Location, event: Event): void {
