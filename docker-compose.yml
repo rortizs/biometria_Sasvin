@@ -1,5 +1,4 @@
 version: "3.8"
-
 services:
   frontend:
     build:
@@ -11,7 +10,12 @@ services:
     restart: unless-stopped
     networks:
       - biometria-network
-
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
   db:
     image: pgvector/pgvector:pg16
     container_name: biometria_db
@@ -23,14 +27,21 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-biometria} -d ${POSTGRES_DB:-biometria_db}"]
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-biometria} -d ${POSTGRES_DB:-biometria_db}
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
       - biometria-network
-
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
   backend:
     build:
       context: ./backend
@@ -39,19 +50,38 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-biometria}:${POSTGRES_PASSWORD:-biometria_secret}@db:5432/${POSTGRES_DB:-biometria_db}
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
-      CORS_ORIGINS: ${CORS_ORIGINS:-https://biometria.sistemaslab.dev}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://asistencia.sistemaslab.dev}
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
     restart: unless-stopped
     networks:
       - biometria-network
-
+      - dokploy-network
+      - default
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - "traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-web.rule=Host(`asistencia.sistemaslab.dev`) && PathPrefix(`/api`)"
+      - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-web.entrypoints=web
+      - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-web.service=sistemabiometrico-biometriacompose-roqjq8-12-web
+      - traefik.http.services.sistemabiometrico-biometriacompose-roqjq8-12-web.loadbalancer.server.port=8000
+      - "traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-websecure.rule=Host(`asistencia.sistemaslab.dev`) && PathPrefix(`/api`)"
+      - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-websecure.entrypoints=websecure
+      - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-websecure.service=sistemabiometrico-biometriacompose-roqjq8-12-websecure
+      - traefik.http.services.sistemabiometrico-biometriacompose-roqjq8-12-websecure.loadbalancer.server.port=8000
+      - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-websecure.tls.certresolver=letsencrypt
 networks:
   biometria-network:
     driver: bridge
-
+  dokploy-network:
+    external: true
 volumes:
-  postgres_data:
+  postgres_data: null
