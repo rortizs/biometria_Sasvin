@@ -13,14 +13,18 @@ from app.schemas.location import LocationCreate, LocationUpdate, LocationRespons
 router = APIRouter()
 
 
-@router.get("/", response_model=list[LocationResponse])
+@router.get(
+    "/",
+    response_model=list[LocationResponse],
+    tags=["locations"],
+)
 async def list_locations(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Location]:
-    """List all locations (sedes)."""
+    """Listar sedes de trabajo con sus coordenadas GPS y radio de validación."""
     query = select(Location)
 
     if active_only:
@@ -32,12 +36,19 @@ async def list_locations(
     return result.scalars().all()
 
 
-@router.get("/{location_id}", response_model=LocationResponse)
+@router.get(
+    "/{location_id}",
+    response_model=LocationResponse,
+    tags=["locations"],
+    responses={
+        404: {"description": "Sede no encontrada"},
+    },
+)
 async def get_location(
     db: Annotated[AsyncSession, Depends(get_db)],
     location_id: UUID,
 ) -> Location:
-    """Get a specific location."""
+    """Obtener una sede por su UUID. Incluye coordenadas y radio de validación GPS."""
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
 
@@ -50,13 +61,24 @@ async def get_location(
     return location
 
 
-@router.post("/", response_model=LocationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=LocationResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["locations"],
+)
 async def create_location(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     location_in: LocationCreate,
 ) -> Location:
-    """Create a new location (admin only)."""
+    """
+    Crear una nueva sede de trabajo. Requiere rol admin.
+
+    El `radius_meters` define el radio en metros alrededor de las coordenadas GPS
+    dentro del cual se considera válida la geolocalización de un empleado al hacer
+    check-in. Valor por defecto: 50 m. Rango válido: 10–5000 m.
+    """
     location = Location(**location_in.model_dump())
     db.add(location)
     await db.commit()
@@ -64,14 +86,21 @@ async def create_location(
     return location
 
 
-@router.patch("/{location_id}", response_model=LocationResponse)
+@router.patch(
+    "/{location_id}",
+    response_model=LocationResponse,
+    tags=["locations"],
+    responses={
+        404: {"description": "Sede no encontrada"},
+    },
+)
 async def update_location(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     location_id: UUID,
     location_in: LocationUpdate,
 ) -> Location:
-    """Update a location (admin only)."""
+    """Actualizar una sede parcialmente. Requiere rol admin."""
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
 
@@ -90,13 +119,20 @@ async def update_location(
     return location
 
 
-@router.delete("/{location_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{location_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["locations"],
+    responses={
+        404: {"description": "Sede no encontrada"},
+    },
+)
 async def delete_location(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     location_id: UUID,
 ) -> None:
-    """Delete a location (admin only)."""
+    """Eliminar una sede. Requiere rol admin."""
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
 

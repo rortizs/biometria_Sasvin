@@ -40,12 +40,38 @@ def _calculate_liveness_delta(metrics: StageMetrics | None) -> Decimal | None:
     )
 
 
-@router.post("/register", response_model=dict)
+@router.post(
+    "/register",
+    response_model=dict,
+    tags=["faces"],
+    responses={
+        400: {"description": "No se detectó rostro válido en ninguna de las imágenes"},
+        404: {"description": "El empleado no existe"},
+    },
+)
 async def register_face(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     request: FaceRegisterRequest,
 ) -> dict:
+    """
+    Registrar el embedding facial de un empleado. Requiere rol admin.
+
+    **Proceso interno:**
+    1. Verifica que el empleado exista en la DB
+    2. Procesa cada imagen con dlib para extraer embeddings de 128 dimensiones
+    3. Elimina los embeddings anteriores del empleado (si los había)
+    4. Guarda los nuevos embeddings en PostgreSQL (pgvector)
+    5. El primer embedding (`is_primary=True`) se usa como referencia principal
+
+    **Recomendaciones para mejor precisión:**
+    - Enviar 3–5 fotos con distintos ángulos (frontal, leve perfil izquierdo/derecho)
+    - Buena iluminación uniforme, sin sombras fuertes
+    - Resolución mínima 200×200 px por imagen
+
+    **Nota:** El registro reemplaza todos los embeddings previos del empleado.
+    Después de registrar, el campo `has_face_registered` del empleado pasa a `true`.
+    """
     # Verify employee exists
     result = await db.execute(
         select(Employee).where(Employee.id == request.employee_id)
@@ -185,11 +211,29 @@ async def register_face(
     }
 
 
-@router.post("/verify", response_model=FaceVerifyResponse)
+@router.post(
+    "/verify",
+    response_model=FaceVerifyResponse,
+    tags=["faces"],
+    responses={
+        200: {"description": "Verificación completada — `success: true` si hay match, `false` si no"},
+    },
+)
 async def verify_face(
     db: Annotated[AsyncSession, Depends(get_db)],
     request: FaceVerifyRequest,
 ) -> FaceVerifyResponse:
+    """
+    Verificar a qué empleado pertenece un rostro. No requiere autenticación.
+
+    A diferencia de check-in/check-out, este endpoint **no registra asistencia** —
+    solo identifica al empleado y devuelve su nombre y nivel de confianza.
+    Útil para diagnóstico y pruebas del sistema de reconocimiento facial.
+
+    **Respuesta:** Siempre devuelve 200. El campo `success` indica si hubo match:
+    - `success: true` → empleado identificado, incluye `employee_id`, `employee_name` y `confidence`
+    - `success: false` → sin match o imagen inválida, incluye `message` con el motivo
+    """
     face_service = FaceRecognitionService()
 
     # Get embedding from provided image
@@ -227,12 +271,27 @@ async def verify_face(
     )
 
 
-@router.delete("/{employee_id}")
+@router.delete(
+    "/{employee_id}",
+    tags=["faces"],
+    responses={
+        404: {"description": "El empleado no tiene embeddings registrados"},
+    },
+)
 async def delete_face_embeddings(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     employee_id: UUID,
 ) -> dict:
+    """
+    Eliminar todos los embeddings faciales de un empleado. Requiere rol admin.
+
+    Después de eliminar, el campo `has_face_registered` del empleado pasa a `false`
+    y no podrá hacer check-in/check-out hasta que se registren nuevos embeddings.
+
+    Útil para: re-registrar con mejores fotos, dar de baja a un empleado,
+    o corregir un registro incorrecto.
+    """
     result = await db.execute(
         select(FaceEmbedding).where(FaceEmbedding.employee_id == employee_id)
     )

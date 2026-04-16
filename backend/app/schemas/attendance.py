@@ -1,15 +1,45 @@
 from datetime import datetime, date
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+_BASE64_IMAGE_EXAMPLE = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBg..."
 
 
 class AttendanceCheckIn(BaseModel):
-    images: list[str] = Field(..., min_length=1, max_length=5)  # Base64 encoded images
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "images": [_BASE64_IMAGE_EXAMPLE],
+                "latitude": 14.6407,
+                "longitude": -90.5133,
+            }
+        }
+    )
+
+    images: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description=(
+            "1 a 5 fotos del rostro en formato base64 (data URL o base64 puro). "
+            "Se recomienda 3 fotos con 250 ms de diferencia entre capturas."
+        ),
+    )
     image: str | None = None  # DEPRECATED: backward compat alias
     device_id: UUID | None = None
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
+    latitude: float | None = Field(
+        default=None,
+        ge=-90,
+        le=90,
+        description="Latitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+    )
+    longitude: float | None = Field(
+        default=None,
+        ge=-180,
+        le=180,
+        description="Longitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -22,11 +52,39 @@ class AttendanceCheckIn(BaseModel):
 
 
 class AttendanceCheckOut(BaseModel):
-    images: list[str] = Field(..., min_length=1, max_length=5)  # Base64 encoded images
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "images": [_BASE64_IMAGE_EXAMPLE],
+                "latitude": 14.6407,
+                "longitude": -90.5133,
+            }
+        }
+    )
+
+    images: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description=(
+            "1 a 5 fotos del rostro en formato base64 (data URL o base64 puro). "
+            "Se recomienda 3 fotos con 250 ms de diferencia entre capturas."
+        ),
+    )
     image: str | None = None  # DEPRECATED: backward compat alias
     device_id: UUID | None = None
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
+    latitude: float | None = Field(
+        default=None,
+        ge=-90,
+        le=90,
+        description="Latitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+    )
+    longitude: float | None = Field(
+        default=None,
+        ge=-180,
+        le=180,
+        description="Longitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+    )
 
     @model_validator(mode="before")
     @classmethod

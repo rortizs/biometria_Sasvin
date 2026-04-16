@@ -62,11 +62,36 @@ async def _validate_geo(
     return validation.is_valid, validation.distance_meters
 
 
-@router.post("/check-in", response_model=AttendanceResponse)
+@router.post(
+    "/check-in",
+    response_model=AttendanceResponse,
+    tags=["attendance"],
+    responses={
+        400: {"description": "No se detectó rostro en la imagen o error al procesarla"},
+        404: {"description": "Ningún empleado coincide con el rostro enviado"},
+        422: {"description": "Error de validación — coordenadas inválidas o imágenes faltantes"},
+    },
+)
 async def check_in(
     db: Annotated[AsyncSession, Depends(get_db)],
     request: AttendanceCheckIn,
 ) -> AttendanceResponse:
+    """
+    Registrar entrada de un catedrático por reconocimiento facial.
+
+    No requiere autenticación. El rostro en las imágenes es la credencial.
+
+    **Proceso interno:**
+    1. Extrae el embedding facial de `images[0]` usando dlib (face_recognition)
+    2. Busca el empleado más parecido en la DB con pgvector (distancia coseno)
+    3. Si la distancia supera el umbral (0.6), devuelve 404
+    4. Valida geolocalización contra la sede asignada al empleado (Haversine)
+    5. Registra la entrada con hora, confianza facial y resultado GPS
+
+    **Nota:** Si el empleado ya tiene check-in hoy, devuelve el registro existente
+    con `message` indicando la hora del check-in previo. La geolocalización es
+    **opcional** — su ausencia o fallo no bloquea el registro.
+    """
     face_service = FaceRecognitionService()
 
     # Get embedding from first image in the array
@@ -169,11 +194,35 @@ async def check_in(
     )
 
 
-@router.post("/check-out", response_model=AttendanceResponse)
+@router.post(
+    "/check-out",
+    response_model=AttendanceResponse,
+    tags=["attendance"],
+    responses={
+        400: {"description": "No se detectó rostro, error de imagen, o no existe check-in previo para hoy"},
+        404: {"description": "Ningún empleado coincide con el rostro enviado"},
+        422: {"description": "Error de validación — coordenadas inválidas o imágenes faltantes"},
+    },
+)
 async def check_out(
     db: Annotated[AsyncSession, Depends(get_db)],
     request: AttendanceCheckOut,
 ) -> AttendanceResponse:
+    """
+    Registrar salida de un catedrático por reconocimiento facial.
+
+    No requiere autenticación. El rostro en las imágenes es la credencial.
+
+    **Proceso interno:**
+    1. Identifica al empleado por reconocimiento facial (igual que check-in)
+    2. Busca el registro de asistencia de hoy para ese empleado
+    3. Si no existe check-in previo, devuelve 400
+    4. Valida geolocalización y registra la salida con hora y confianza
+    5. `geo_validated` se mantiene `true` solo si tanto check-in como check-out fueron válidos
+
+    **Nota:** Si el empleado ya tiene check-out hoy, devuelve el registro existente
+    con `message` indicando la hora del check-out previo.
+    """
     face_service = FaceRecognitionService()
 
     try:
@@ -275,7 +324,14 @@ async def check_out(
     )
 
 
-@router.get("/", response_model=list[AttendanceResponse])
+@router.get(
+    "/",
+    response_model=list[AttendanceResponse],
+    tags=["attendance"],
+    responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+    },
+)
 async def list_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
@@ -287,6 +343,18 @@ async def list_attendance(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[AttendanceResponse]:
+    """
+    Listar registros de asistencia con filtros opcionales. Requiere rol admin.
+
+    **Filtros disponibles (todos opcionales, combinables):**
+    - `record_date` — fecha exacta (YYYY-MM-DD)
+    - `date_from` / `date_to` — rango de fechas (inclusive en ambos extremos)
+    - `employee_id` — UUID del empleado
+    - `status` — estado del registro (`present`, `absent`, `late`)
+
+    **Paginación:** usar `skip` y `limit` (máx. 1000 por request).
+    Los resultados se ordenan por fecha descendente.
+    """
     query = select(AttendanceRecord).options(selectinload(AttendanceRecord.employee))
 
     # Single date filter (backwards compatible)
@@ -326,11 +394,25 @@ async def list_attendance(
     ]
 
 
-@router.get("/today", response_model=list[AttendanceResponse])
+@router.get(
+    "/today",
+    response_model=list[AttendanceResponse],
+    tags=["attendance"],
+    responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+    },
+)
 async def list_today_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
 ) -> list[AttendanceResponse]:
+    """
+    Listar todos los registros de asistencia del día de hoy. Requiere rol admin.
+
+    Shortcut de `GET /` filtrado por la fecha actual del servidor.
+    Los resultados se ordenan por hora de check-in descendente (el más reciente primero).
+    Útil para el dashboard en tiempo real y el kiosk de supervisión.
+    """
     today = date.today()
 
     query = (
