@@ -43,14 +43,23 @@ router = APIRouter()
 # ==================== SCHEDULE PATTERNS ====================
 
 
-@router.get("/patterns", response_model=list[ScheduleResponse])
+@router.get(
+    "/patterns",
+    response_model=list[ScheduleResponse],
+    tags=["schedules"],
+)
 async def list_schedule_patterns(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Schedule]:
-    """List all schedule patterns."""
+    """
+    Listar patrones de horario reutilizables.
+
+    Un patrón define horario de entrada/salida y se puede asignar a uno o varios
+    empleados para días específicos. Ejemplos: "Turno Mañana 7-13h", "Turno Tarde 14-20h".
+    """
     query = select(Schedule)
     if active_only:
         query = query.where(Schedule.is_active == True)
@@ -59,12 +68,19 @@ async def list_schedule_patterns(
     return result.scalars().all()
 
 
-@router.get("/patterns/{pattern_id}", response_model=ScheduleResponse)
+@router.get(
+    "/patterns/{pattern_id}",
+    response_model=ScheduleResponse,
+    tags=["schedules"],
+    responses={
+        404: {"description": "Patrón de horario no encontrado"},
+    },
+)
 async def get_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
     pattern_id: UUID,
 ) -> Schedule:
-    """Get a specific schedule pattern."""
+    """Obtener un patrón de horario por su UUID."""
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
@@ -75,14 +91,20 @@ async def get_schedule_pattern(
 
 
 @router.post(
-    "/patterns", response_model=ScheduleResponse, status_code=status.HTTP_201_CREATED
+    "/patterns",
+    response_model=ScheduleResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["schedules"],
+    responses={
+        400: {"description": "Ya existe un patrón con ese nombre"},
+    },
 )
 async def create_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     pattern_in: ScheduleCreate,
 ) -> Schedule:
-    """Create a new schedule pattern (admin only)."""
+    """Crear un nuevo patrón de horario reutilizable. Requiere rol admin. El nombre debe ser único."""
     result = await db.execute(select(Schedule).where(Schedule.name == pattern_in.name))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -97,14 +119,21 @@ async def create_schedule_pattern(
     return pattern
 
 
-@router.patch("/patterns/{pattern_id}", response_model=ScheduleResponse)
+@router.patch(
+    "/patterns/{pattern_id}",
+    response_model=ScheduleResponse,
+    tags=["schedules"],
+    responses={
+        404: {"description": "Patrón de horario no encontrado"},
+    },
+)
 async def update_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     pattern_id: UUID,
     pattern_in: ScheduleUpdate,
 ) -> Schedule:
-    """Update a schedule pattern (admin only)."""
+    """Actualizar un patrón de horario parcialmente. Requiere rol admin."""
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
@@ -121,13 +150,20 @@ async def update_schedule_pattern(
     return pattern
 
 
-@router.delete("/patterns/{pattern_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/patterns/{pattern_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["schedules"],
+    responses={
+        404: {"description": "Patrón de horario no encontrado"},
+    },
+)
 async def delete_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     pattern_id: UUID,
 ) -> None:
-    """Delete a schedule pattern (admin only)."""
+    """Eliminar un patrón de horario. Requiere rol admin."""
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
@@ -141,14 +177,24 @@ async def delete_schedule_pattern(
 # ==================== SCHEDULE ASSIGNMENTS ====================
 
 
-@router.get("/assignments", response_model=list[ScheduleAssignmentResponse])
+@router.get(
+    "/assignments",
+    response_model=list[ScheduleAssignmentResponse],
+    tags=["schedules"],
+)
 async def list_assignments(
     db: Annotated[AsyncSession, Depends(get_db)],
     employee_id: UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[ScheduleAssignment]:
-    """List schedule assignments with optional filters."""
+    """
+    Listar asignaciones de horario con filtros opcionales.
+
+    Las asignaciones vinculan un patrón de horario a un empleado para una fecha concreta.
+    Filtros disponibles: `employee_id`, `date_from`, `date_to` (todos opcionales, combinables).
+    Resultados ordenados por fecha ascendente.
+    """
     query = select(ScheduleAssignment)
 
     if employee_id:
@@ -167,13 +213,22 @@ async def list_assignments(
     "/assignments",
     response_model=ScheduleAssignmentResponse,
     status_code=status.HTTP_201_CREATED,
+    tags=["schedules"],
 )
 async def create_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     assignment_in: ScheduleAssignmentCreate,
 ) -> ScheduleAssignment:
-    """Create or update a schedule assignment for a specific date."""
+    """
+    Asignar un patrón de horario a un empleado para una fecha específica. Requiere rol admin.
+
+    Comportamiento upsert: si ya existe una asignación para ese empleado y fecha,
+    la actualiza en lugar de crear un duplicado.
+
+    Para marcar un día libre sin patrón, usar `is_day_off: true`.
+    Para horario personalizado sin patrón, usar `custom_check_in` y `custom_check_out`.
+    """
     # Check if assignment already exists for this employee and date
     result = await db.execute(
         select(ScheduleAssignment).where(
@@ -206,13 +261,25 @@ async def create_assignment(
     return assignment
 
 
-@router.post("/assignments/bulk", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/assignments/bulk",
+    status_code=status.HTTP_201_CREATED,
+    tags=["schedules"],
+)
 async def create_bulk_assignments(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     bulk_in: BulkAssignmentCreate,
 ) -> dict:
-    """Create assignments for multiple employees and dates."""
+    """
+    Asignar un patrón de horario a múltiples empleados y fechas en una sola llamada. Requiere rol admin.
+
+    Útil para configurar horarios semanales o quincenales en bloque.
+    Acepta listas de `employee_ids` y `dates` — genera el producto cartesiano de ambas.
+
+    Comportamiento upsert por cada par (empleado, fecha): actualiza si existe, crea si no.
+    La respuesta incluye `created` y `updated` con los conteos respectivos.
+    """
     created_count = 0
     updated_count = 0
 
@@ -247,13 +314,20 @@ async def create_bulk_assignments(
     return {"created": created_count, "updated": updated_count}
 
 
-@router.delete("/assignments/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/assignments/{assignment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["schedules"],
+    responses={
+        404: {"description": "Asignación no encontrada"},
+    },
+)
 async def delete_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     assignment_id: UUID,
 ) -> None:
-    """Delete a schedule assignment."""
+    """Eliminar una asignación de horario. Requiere rol admin."""
     result = await db.execute(
         select(ScheduleAssignment).where(ScheduleAssignment.id == assignment_id)
     )
@@ -269,7 +343,11 @@ async def delete_assignment(
 # ==================== SCHEDULE EXCEPTIONS ====================
 
 
-@router.get("/exceptions", response_model=list[ScheduleExceptionResponse])
+@router.get(
+    "/exceptions",
+    response_model=list[ScheduleExceptionResponse],
+    tags=["schedules"],
+)
 async def list_exceptions(
     db: Annotated[AsyncSession, Depends(get_db)],
     employee_id: UUID | None = None,
@@ -277,7 +355,20 @@ async def list_exceptions(
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[ScheduleException]:
-    """List schedule exceptions with optional filters."""
+    """
+    Listar excepciones de horario con filtros opcionales.
+
+    Tipos de excepción disponibles (`exception_type`):
+    - `vacation` — vacaciones
+    - `holiday` — feriado nacional o institucional
+    - `sick_leave` — incapacidad médica
+    - `permission` — permiso con o sin goce de sueldo
+    - `other` — otro motivo
+
+    **Nota:** Las excepciones con `employee_id = null` aplican a **todos** los empleados
+    (útil para feriados globales). Al filtrar por `employee_id`, se devuelven tanto las
+    excepciones individuales del empleado como las globales.
+    """
     query = select(ScheduleException)
 
     if employee_id:
@@ -303,13 +394,25 @@ async def list_exceptions(
     "/exceptions",
     response_model=ScheduleExceptionResponse,
     status_code=status.HTTP_201_CREATED,
+    tags=["schedules"],
 )
 async def create_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     exception_in: ScheduleExceptionCreate,
 ) -> ScheduleException:
-    """Create a schedule exception (vacation, holiday, sick leave, etc.)."""
+    """
+    Crear una excepción de horario. Requiere rol admin.
+
+    Tipos disponibles: `vacation`, `holiday`, `sick_leave`, `permission`, `other`.
+
+    Omitir `employee_id` para crear una excepción **global** que aplica a todos los empleados
+    (útil para feriados nacionales o cierre institucional).
+
+    Si `has_work_hours: true`, se pueden especificar `work_check_in` y `work_check_out`
+    para días con horario reducido (p.ej. feriado con guardia). Si `has_work_hours: false`,
+    el día se marca como descanso.
+    """
     exception = ScheduleException(
         **exception_in.model_dump(), created_by=current_user.id
     )
@@ -319,14 +422,21 @@ async def create_exception(
     return exception
 
 
-@router.patch("/exceptions/{exception_id}", response_model=ScheduleExceptionResponse)
+@router.patch(
+    "/exceptions/{exception_id}",
+    response_model=ScheduleExceptionResponse,
+    tags=["schedules"],
+    responses={
+        404: {"description": "Excepción no encontrada"},
+    },
+)
 async def update_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     exception_id: UUID,
     exception_in: ScheduleExceptionUpdate,
 ) -> ScheduleException:
-    """Update a schedule exception."""
+    """Actualizar una excepción de horario parcialmente. Requiere rol admin."""
     result = await db.execute(
         select(ScheduleException).where(ScheduleException.id == exception_id)
     )
@@ -345,13 +455,20 @@ async def update_exception(
     return exception
 
 
-@router.delete("/exceptions/{exception_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/exceptions/{exception_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["schedules"],
+    responses={
+        404: {"description": "Excepción no encontrada"},
+    },
+)
 async def delete_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     exception_id: UUID,
 ) -> None:
-    """Delete a schedule exception."""
+    """Eliminar una excepción de horario. Requiere rol admin."""
     result = await db.execute(
         select(ScheduleException).where(ScheduleException.id == exception_id)
     )
@@ -367,16 +484,39 @@ async def delete_exception(
 # ==================== CALENDAR VIEW ====================
 
 
-@router.get("/calendar", response_model=CalendarResponse)
+@router.get(
+    "/calendar",
+    response_model=CalendarResponse,
+    tags=["schedules"],
+)
 async def get_calendar(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
-    start_date: date = Query(..., description="Start date of the calendar view"),
-    end_date: date = Query(..., description="End date of the calendar view"),
+    start_date: date = Query(..., description="Fecha de inicio del rango (YYYY-MM-DD)"),
+    end_date: date = Query(..., description="Fecha de fin del rango (YYYY-MM-DD)"),
     department_id: UUID | None = None,
     employee_id: UUID | None = None,
 ) -> CalendarResponse:
-    """Get calendar view with schedules for all employees in a date range."""
+    """
+    Vista consolidada de horarios para todos los empleados en un rango de fechas. Requiere autenticación.
+
+    Para cada empleado y cada día del rango, resuelve el horario aplicable
+    siguiendo esta lógica de prioridad (de mayor a menor):
+
+    1. **Excepción** (`vacation`, `holiday`, `sick_leave`, `permission`, `other`) —
+       si existe una excepción individual o global para ese día, tiene prioridad absoluta.
+       Color: gris (día libre) o azul (excepción con horas de trabajo especiales).
+    2. **Asignación específica** — si hay una asignación para ese empleado y fecha concreta,
+       aplica el patrón asignado o el horario personalizado. Color: color del patrón o violeta
+       si es horario custom.
+    3. **Horario por defecto** (`EmployeeSchedule`) — si no hay excepción ni asignación,
+       se usa el patrón asignado al empleado para ese día de la semana.
+
+    **Filtros opcionales:** `department_id` para ver solo un departamento,
+    `employee_id` para ver solo un empleado.
+
+    La respuesta es una grilla: una fila por empleado, una columna por día del rango.
+    """
 
     # Get employees
     emp_query = select(Employee).where(Employee.is_active == True)

@@ -14,7 +14,14 @@ from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeRespons
 router = APIRouter()
 
 
-@router.get("/", response_model=list[EmployeeResponse])
+@router.get(
+    "/",
+    response_model=list[EmployeeResponse],
+    tags=["employees"],
+    responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+    },
+)
 async def list_employees(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
@@ -22,6 +29,18 @@ async def list_employees(
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[EmployeeResponse]:
+    """
+    Listar empleados/catedráticos registrados en el sistema. Requiere rol admin.
+
+    **Paginación:** usar `skip` y `limit` (máx. 1000 por request).
+    Los resultados se ordenan alfabéticamente por apellido y nombre.
+
+    **Filtro `active_only`:** por defecto `true` — solo devuelve empleados activos.
+    Pasar `active_only=false` para incluir empleados dados de baja.
+
+    El campo `has_face_registered` indica si el empleado ya tiene embeddings
+    faciales registrados y puede hacer check-in biométrico.
+    """
     query = select(Employee).options(selectinload(Employee.face_embeddings))
 
     if active_only:
@@ -54,12 +73,26 @@ async def list_employees(
     return response
 
 
-@router.get("/{employee_id}", response_model=EmployeeResponse)
+@router.get(
+    "/{employee_id}",
+    response_model=EmployeeResponse,
+    tags=["employees"],
+    responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        404: {"description": "Empleado no encontrado"},
+    },
+)
 async def get_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     employee_id: UUID,
 ) -> EmployeeResponse:
+    """
+    Obtener los datos de un empleado por su UUID. Requiere rol admin.
+
+    Incluye el estado de registro facial (`has_face_registered`) y las referencias
+    a departamento, puesto y sede asignados.
+    """
     query = (
         select(Employee)
         .options(selectinload(Employee.face_embeddings))
@@ -91,12 +124,30 @@ async def get_employee(
     )
 
 
-@router.post("/", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=EmployeeResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["employees"],
+    responses={
+        400: {"description": "El `employee_code` ya existe — debe ser único en el sistema"},
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+    },
+)
 async def create_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     employee_in: EmployeeCreate,
 ) -> EmployeeResponse:
+    """
+    Crear un nuevo empleado/catedrático. Requiere rol admin.
+
+    El `employee_code` debe ser único (p.ej. `EMP-001`, número de carné, código institucional).
+    El email también es requerido y se usa solo para identificación interna — no se envían correos.
+
+    Después de crear el empleado, registrar sus fotos con `POST /faces/register`
+    para que pueda hacer check-in biométrico. Hasta entonces, `has_face_registered` es `false`.
+    """
     # Check if employee code already exists
     result = await db.execute(
         select(Employee).where(Employee.employee_code == employee_in.employee_code)
@@ -129,13 +180,30 @@ async def create_employee(
     )
 
 
-@router.patch("/{employee_id}", response_model=EmployeeResponse)
+@router.patch(
+    "/{employee_id}",
+    response_model=EmployeeResponse,
+    tags=["employees"],
+    responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        404: {"description": "Empleado no encontrado"},
+    },
+)
 async def update_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     employee_id: UUID,
     employee_in: EmployeeUpdate,
 ) -> EmployeeResponse:
+    """
+    Actualizar parcialmente los datos de un empleado. Requiere rol admin.
+
+    Solo se actualizan los campos incluidos en el body (PATCH semántico).
+    Para dar de baja a un empleado sin eliminarlo, usar `is_active: false`.
+
+    No modifica los embeddings faciales — para eso usar `DELETE /faces/{id}`
+    seguido de `POST /faces/register`.
+    """
     query = (
         select(Employee)
         .options(selectinload(Employee.face_embeddings))
@@ -174,12 +242,29 @@ async def update_employee(
     )
 
 
-@router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{employee_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["employees"],
+    responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        404: {"description": "Empleado no encontrado"},
+    },
+)
 async def delete_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     employee_id: UUID,
 ) -> None:
+    """
+    Eliminar permanentemente un empleado y todos sus datos. Requiere rol admin.
+
+    **ADVERTENCIA — efecto CASCADE:** elimina también todos los registros asociados:
+    embeddings faciales, registros de asistencia e historial de sesiones biométricas.
+    Esta acción es irreversible.
+
+    Para desactivar sin perder historial, preferir `PATCH /{id}` con `is_active: false`.
+    """
     result = await db.execute(select(Employee).where(Employee.id == employee_id))
     employee = result.scalar_one_or_none()
 

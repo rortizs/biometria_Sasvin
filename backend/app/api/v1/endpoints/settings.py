@@ -13,11 +13,23 @@ from app.schemas.settings import SettingsCreate, SettingsUpdate, SettingsRespons
 router = APIRouter()
 
 
-@router.get("/", response_model=SettingsResponse)
+@router.get(
+    "/",
+    response_model=SettingsResponse,
+    tags=["settings"],
+    responses={
+        404: {"description": "Configuración no inicializada — ejecutar seed de datos"},
+    },
+)
 async def get_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Settings:
-    """Get system settings (singleton)."""
+    """
+    Obtener la configuración global del sistema.
+
+    Registro singleton — solo puede existir uno. Si no está inicializado,
+    ejecutar el seed de datos o usar `POST /settings/` para crearlo.
+    """
     result = await db.execute(select(Settings).limit(1))
     settings = result.scalar_one_or_none()
 
@@ -30,13 +42,23 @@ async def get_settings(
     return settings
 
 
-@router.put("/", response_model=SettingsResponse)
+@router.put(
+    "/",
+    response_model=SettingsResponse,
+    tags=["settings"],
+)
 async def update_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     settings_in: SettingsUpdate,
 ) -> Settings:
-    """Update system settings (admin only)."""
+    """
+    Actualizar la configuración global del sistema. Requiere rol admin.
+
+    Si la configuración no existe aún, la crea automáticamente (upsert).
+    Usar este endpoint para cambiar nombre de empresa, dominio de email,
+    dirección, slogan o logo. Todos los campos son opcionales.
+    """
     result = await db.execute(select(Settings).limit(1))
     settings = result.scalar_one_or_none()
 
@@ -62,13 +84,26 @@ async def update_settings(
     return settings
 
 
-@router.post("/", response_model=SettingsResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=SettingsResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["settings"],
+    responses={
+        400: {"description": "La configuración ya existe — usar PUT para actualizar"},
+    },
+)
 async def create_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     settings_in: SettingsCreate,
 ) -> Settings:
-    """Create system settings (only if none exist)."""
+    """
+    Inicializar la configuración del sistema por primera vez. Requiere rol admin.
+
+    Solo puede ejecutarse una vez — si ya existe configuración, devuelve 400.
+    Para actualizaciones posteriores usar `PUT /settings/`.
+    """
     result = await db.execute(select(Settings).limit(1))
     existing = result.scalar_one_or_none()
 

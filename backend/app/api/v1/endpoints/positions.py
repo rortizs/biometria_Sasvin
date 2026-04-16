@@ -13,14 +13,18 @@ from app.schemas.position import PositionCreate, PositionUpdate, PositionRespons
 router = APIRouter()
 
 
-@router.get("/", response_model=list[PositionResponse])
+@router.get(
+    "/",
+    response_model=list[PositionResponse],
+    tags=["positions"],
+)
 async def list_positions(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Position]:
-    """List all positions."""
+    """Listar cargos y puestos. No requiere autenticación."""
     query = select(Position)
 
     if active_only:
@@ -32,12 +36,19 @@ async def list_positions(
     return result.scalars().all()
 
 
-@router.get("/{position_id}", response_model=PositionResponse)
+@router.get(
+    "/{position_id}",
+    response_model=PositionResponse,
+    tags=["positions"],
+    responses={
+        404: {"description": "Puesto no encontrado"},
+    },
+)
 async def get_position(
     db: Annotated[AsyncSession, Depends(get_db)],
     position_id: UUID,
 ) -> Position:
-    """Get a specific position."""
+    """Obtener un puesto por su UUID."""
     result = await db.execute(select(Position).where(Position.id == position_id))
     position = result.scalar_one_or_none()
 
@@ -50,13 +61,21 @@ async def get_position(
     return position
 
 
-@router.post("/", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PositionResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["positions"],
+    responses={
+        400: {"description": "Ya existe un puesto con ese nombre — el nombre debe ser único"},
+    },
+)
 async def create_position(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     position_in: PositionCreate,
 ) -> Position:
-    """Create a new position (admin only)."""
+    """Crear un nuevo cargo o puesto. Requiere rol admin. El nombre debe ser único."""
     # Check if name already exists
     result = await db.execute(select(Position).where(Position.name == position_in.name))
     if result.scalar_one_or_none():
@@ -72,14 +91,21 @@ async def create_position(
     return position
 
 
-@router.patch("/{position_id}", response_model=PositionResponse)
+@router.patch(
+    "/{position_id}",
+    response_model=PositionResponse,
+    tags=["positions"],
+    responses={
+        404: {"description": "Puesto no encontrado"},
+    },
+)
 async def update_position(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     position_id: UUID,
     position_in: PositionUpdate,
 ) -> Position:
-    """Update a position (admin only)."""
+    """Actualizar un puesto parcialmente. Requiere rol admin."""
     result = await db.execute(select(Position).where(Position.id == position_id))
     position = result.scalar_one_or_none()
 
@@ -98,13 +124,20 @@ async def update_position(
     return position
 
 
-@router.delete("/{position_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{position_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["positions"],
+    responses={
+        404: {"description": "Puesto no encontrado"},
+    },
+)
 async def delete_position(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     position_id: UUID,
 ) -> None:
-    """Delete a position (admin only)."""
+    """Eliminar un puesto. Requiere rol admin."""
     result = await db.execute(select(Position).where(Position.id == position_id))
     position = result.scalar_one_or_none()
 

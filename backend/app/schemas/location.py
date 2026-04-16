@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LocationBase(BaseModel):
@@ -13,7 +13,17 @@ class LocationBase(BaseModel):
 
 
 class LocationCreate(LocationBase):
-    pass
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "Campus Central UMG",
+                "address": "6a Calle 22-38 Zona 10, Ciudad de Guatemala",
+                "latitude": 14.6407,
+                "longitude": -90.5133,
+                "radius_meters": 100,
+            }
+        }
+    )
 
 
 class LocationUpdate(BaseModel):
