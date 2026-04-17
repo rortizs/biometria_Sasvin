@@ -509,6 +509,19 @@ export class LocationsComponent implements OnInit, AfterViewInit {
   }
 
   saveLocation(): void {
+    if (!this.formData.name?.trim()) {
+      alert('El nombre de la sede es requerido');
+      return;
+    }
+
+    const payload: LocationCreate = {
+      name: this.formData.name.trim(),
+      address: this.formData.address?.trim() || null,
+      latitude: this.formData.latitude ?? 14.6349,
+      longitude: this.formData.longitude ?? -90.5069,
+      radius_meters: this.formData.radius_meters ?? 50,
+    };
+
     const handleError = (err: any) => {
       const detail = err.error?.detail;
       if (Array.isArray(detail)) {
@@ -520,12 +533,12 @@ export class LocationsComponent implements OnInit, AfterViewInit {
     };
 
     if (this.editMode() && this.editingId) {
-      this.locationService.updateLocation(this.editingId, this.formData).subscribe({
+      this.locationService.updateLocation(this.editingId, payload).subscribe({
         next: () => { this.closeModal(); this.loadLocations(); },
         error: handleError,
       });
     } else {
-      this.locationService.createLocation(this.formData).subscribe({
+      this.locationService.createLocation(payload).subscribe({
         next: () => { this.closeModal(); this.loadLocations(); },
         error: handleError,
       });

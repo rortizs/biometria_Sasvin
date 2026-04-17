@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LocationBase(BaseModel):
@@ -10,6 +10,11 @@ class LocationBase(BaseModel):
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
     radius_meters: int = Field(default=50, ge=10, le=5000)
+
+    @field_validator("radius_meters", mode="before")
+    @classmethod
+    def default_radius_if_none(cls, v: object) -> object:
+        return 50 if v is None else v
 
 
 class LocationCreate(LocationBase):
