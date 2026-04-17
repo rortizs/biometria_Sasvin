@@ -13,14 +13,18 @@ from app.schemas.department import DepartmentCreate, DepartmentUpdate, Departmen
 router = APIRouter()
 
 
-@router.get("/", response_model=list[DepartmentResponse])
+@router.get(
+    "/",
+    response_model=list[DepartmentResponse],
+    tags=["departments"],
+)
 async def list_departments(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Department]:
-    """List all departments."""
+    """Listar facultades y departamentos. No requiere autenticación."""
     query = select(Department)
 
     if active_only:
@@ -32,12 +36,19 @@ async def list_departments(
     return result.scalars().all()
 
 
-@router.get("/{department_id}", response_model=DepartmentResponse)
+@router.get(
+    "/{department_id}",
+    response_model=DepartmentResponse,
+    tags=["departments"],
+    responses={
+        404: {"description": "Departamento no encontrado"},
+    },
+)
 async def get_department(
     db: Annotated[AsyncSession, Depends(get_db)],
     department_id: UUID,
 ) -> Department:
-    """Get a specific department."""
+    """Obtener un departamento por su UUID."""
     result = await db.execute(select(Department).where(Department.id == department_id))
     department = result.scalar_one_or_none()
 
@@ -50,13 +61,18 @@ async def get_department(
     return department
 
 
-@router.post("/", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=DepartmentResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["departments"],
+)
 async def create_department(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     department_in: DepartmentCreate,
 ) -> Department:
-    """Create a new department (admin only)."""
+    """Crear un nuevo departamento o facultad. Requiere rol admin."""
     department = Department(**department_in.model_dump())
     db.add(department)
     await db.commit()
@@ -64,14 +80,21 @@ async def create_department(
     return department
 
 
-@router.patch("/{department_id}", response_model=DepartmentResponse)
+@router.patch(
+    "/{department_id}",
+    response_model=DepartmentResponse,
+    tags=["departments"],
+    responses={
+        404: {"description": "Departamento no encontrado"},
+    },
+)
 async def update_department(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     department_id: UUID,
     department_in: DepartmentUpdate,
 ) -> Department:
-    """Update a department (admin only)."""
+    """Actualizar un departamento parcialmente. Requiere rol admin."""
     result = await db.execute(select(Department).where(Department.id == department_id))
     department = result.scalar_one_or_none()
 
@@ -90,13 +113,20 @@ async def update_department(
     return department
 
 
-@router.delete("/{department_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{department_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["departments"],
+    responses={
+        404: {"description": "Departamento no encontrado"},
+    },
+)
 async def delete_department(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_admin)],
     department_id: UUID,
 ) -> None:
-    """Delete a department (admin only)."""
+    """Eliminar un departamento. Requiere rol admin."""
     result = await db.execute(select(Department).where(Department.id == department_id))
     department = result.scalar_one_or_none()
 

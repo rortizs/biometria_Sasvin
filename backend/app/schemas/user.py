@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class UserBase(BaseModel):
@@ -12,6 +12,13 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_umg_email(cls, v: str) -> str:
+        if not v.endswith("@miumg.edu.gt"):
+            raise ValueError("Solo se aceptan correos institucionales @miumg.edu.gt")
+        return v
 
 
 class UserResponse(UserBase):

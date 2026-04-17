@@ -1,3 +1,4 @@
+name: sistemabiometrico-biometriacompose-roqjq8
 version: "3.8"
 services:
   frontend:
@@ -78,6 +79,7 @@ services:
       - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-websecure.service=sistemabiometrico-biometriacompose-roqjq8-12-websecure
       - traefik.http.services.sistemabiometrico-biometriacompose-roqjq8-12-websecure.loadbalancer.server.port=8000
       - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-websecure.tls.certresolver=letsencrypt
+      - traefik.http.routers.sistemabiometrico-biometriacompose-roqjq8-12-websecure.middlewares=redirect-to-https@file
 networks:
   biometria-network:
     driver: bridge
