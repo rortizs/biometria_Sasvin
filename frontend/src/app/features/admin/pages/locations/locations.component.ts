@@ -487,14 +487,15 @@ export class LocationsComponent implements OnInit, AfterViewInit {
     }).addTo(this.modalMap);
 
     this.modalMarker.on('dragend', () => {
-      const pos = this.modalMarker!.getLatLng();
+      const pos = this.modalMarker!.getLatLng().wrap();
       this.formData.latitude = Math.round(pos.lat * 1000000) / 1000000;
       this.formData.longitude = Math.round(pos.lng * 1000000) / 1000000;
     });
 
     this.modalMap.on('click', (e: L.LeafletMouseEvent) => {
-      this.formData.latitude = Math.round(e.latlng.lat * 1000000) / 1000000;
-      this.formData.longitude = Math.round(e.latlng.lng * 1000000) / 1000000;
+      const pos = e.latlng.wrap();
+      this.formData.latitude = Math.round(pos.lat * 1000000) / 1000000;
+      this.formData.longitude = Math.round(pos.lng * 1000000) / 1000000;
       this.modalMarker?.setLatLng(e.latlng);
     });
   }
