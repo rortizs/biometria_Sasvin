@@ -10,6 +10,7 @@ COPY package*.json ./
 RUN npm ci --prefer-offline --legacy-peer-deps
 
 COPY . .
+ARG CACHEBUST=1
 RUN npm run build -- --configuration production
 
 ## Stage 2 — Serve with nginx
