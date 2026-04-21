@@ -24,6 +24,7 @@ from app.schemas.permission_request import (
     PermissionRequestReject,
     PermissionRequestResponse,
 )
+from app.services.notification_service import notify_user
 
 router = APIRouter()
 
@@ -213,6 +214,19 @@ async def approve_permission_request(
         permission_request.coordinator_reviewed_at = now
         permission_request.coordinator_notes = body.notes
 
+        await notify_user(
+            db=db,
+            user_id=str(permission_request.requested_by_user_id),
+            title="Solicitud en revisión",
+            message=(
+                f"Tu solicitud de {permission_request.exception_type} del "
+                f"{permission_request.start_date} fue aprobada por el coordinador y "
+                f"está pendiente de aprobación final por el director."
+            ),
+            notification_type="permission_coordinator_approved",
+            request_id=str(permission_request.id),
+        )
+
     elif permission_request.status == PermissionRequestStatus.coordinator_approved:
         # Stage 2: director approval
         _allowed = {UserRole.director, UserRole.admin}
@@ -238,6 +252,19 @@ async def approve_permission_request(
         db.add(schedule_exception)
         await db.flush()  # Get the id without committing yet
         permission_request.schedule_exception_id = schedule_exception.id
+
+        await notify_user(
+            db=db,
+            user_id=str(permission_request.requested_by_user_id),
+            title="Solicitud aprobada",
+            message=(
+                f"Tu solicitud de {permission_request.exception_type} del "
+                f"{permission_request.start_date} al {permission_request.end_date} "
+                f"fue aprobada."
+            ),
+            notification_type="permission_approved",
+            request_id=str(permission_request.id),
+        )
 
     else:
         raise HTTPException(
@@ -313,6 +340,19 @@ async def reject_permission_request(
 
     permission_request.status = PermissionRequestStatus.rejected
     permission_request.rejection_reason = body.rejection_reason
+
+    await notify_user(
+        db=db,
+        user_id=str(permission_request.requested_by_user_id),
+        title="Solicitud rechazada",
+        message=(
+            f"Tu solicitud de {permission_request.exception_type} del "
+            f"{permission_request.start_date} fue rechazada. "
+            f"Motivo: {body.rejection_reason}"
+        ),
+        notification_type="permission_rejected",
+        request_id=str(permission_request.id),
+    )
 
     await db.commit()
     await db.refresh(permission_request)
