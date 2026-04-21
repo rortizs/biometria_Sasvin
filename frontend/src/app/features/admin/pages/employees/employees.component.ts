@@ -29,9 +29,9 @@ import { Location } from '../../../../core/models/location.model';
         </button>
       </header>
 
-      <!-- Employees table -->
+      <!-- Desktop table -->
       <div class="table-container">
-        <table>
+        <table class="desktop-table">
           <thead>
             <tr>
               <th>Código</th>
@@ -90,6 +90,67 @@ import { Location } from '../../../../core/models/location.model';
             }
           </tbody>
         </table>
+
+        <!-- Mobile cards (visible only on <=480px) -->
+        <div class="mobile-cards">
+          @for (employee of employees(); track employee.id) {
+            <div class="mobile-employee-card">
+              <div class="mobile-card-header">
+                <div class="mobile-card-title">
+                  <span class="mobile-emp-code">{{ employee.employee_code }}</span>
+                  <span class="mobile-emp-name">{{ employee.first_name }} {{ employee.last_name }}</span>
+                </div>
+                @if (employee.has_face_registered) {
+                  <span class="badge success">Registrado</span>
+                } @else {
+                  <span class="badge warning">Pendiente</span>
+                }
+              </div>
+              <div class="mobile-card-body">
+                <div class="mobile-field">
+                  <span class="mobile-label">Email</span>
+                  <span class="mobile-value mobile-email">{{ employee.email }}</span>
+                </div>
+                <div class="mobile-field">
+                  <span class="mobile-label">Departamento</span>
+                  <span class="mobile-value">{{ getDepartmentName(employee.department_id) }}</span>
+                </div>
+                <div class="mobile-field">
+                  <span class="mobile-label">Puesto</span>
+                  <span class="mobile-value">{{ getPositionName(employee.position_id) }}</span>
+                </div>
+                <div class="mobile-field">
+                  <span class="mobile-label">Sede</span>
+                  <span class="mobile-value">{{ getLocationName(employee.location_id) }}</span>
+                </div>
+              </div>
+              <div class="mobile-card-actions">
+                <button
+                  class="btn btn-sm btn-edit"
+                  (click)="editEmployee(employee)"
+                  title="Editar"
+                >
+                  ✏️ Editar
+                </button>
+                <button
+                  class="btn btn-sm"
+                  (click)="registerFace(employee)"
+                  [disabled]="employee.has_face_registered"
+                  title="Registrar rostro"
+                >
+                  📷 Rostro
+                </button>
+                <button
+                  class="btn btn-sm btn-danger"
+                  (click)="deleteEmployee(employee)"
+                  title="Eliminar"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+          }
+        </div>
       </div>
 
       <!-- Create/Edit modal -->
@@ -342,6 +403,8 @@ import { Location } from '../../../../core/models/location.model';
       justify-content: space-between;
       align-items: flex-end;
       margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
     }
 
     .back-link {
@@ -390,6 +453,87 @@ import { Location } from '../../../../core/models/location.model';
 
     .actions { display: flex; gap: 0.5rem; }
 
+    /* Mobile cards — hidden on desktop */
+    .mobile-cards {
+      display: none;
+    }
+
+    .mobile-employee-card {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 1rem;
+    }
+
+    .mobile-employee-card:last-child {
+      border-bottom: none;
+    }
+
+    .mobile-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+      gap: 0.5rem;
+    }
+
+    .mobile-card-title {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .mobile-emp-code {
+      font-size: 0.75rem;
+      color: #6b7280;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .mobile-emp-name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .mobile-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .mobile-field {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem;
+    }
+
+    .mobile-label {
+      color: #6b7280;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+      flex-shrink: 0;
+    }
+
+    .mobile-value {
+      color: #374151;
+      text-align: right;
+    }
+
+    .mobile-email {
+      font-size: 0.8125rem;
+      word-break: break-all;
+    }
+
+    .mobile-card-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -398,6 +542,7 @@ import { Location } from '../../../../core/models/location.model';
       align-items: center;
       justify-content: center;
       z-index: 50;
+      padding: 1rem;
     }
 
     .modal {
@@ -405,7 +550,7 @@ import { Location } from '../../../../core/models/location.model';
       padding: 2rem;
       border-radius: 1rem;
       width: 100%;
-      max-width: 550px;
+      max-width: 720px;
       max-height: 90vh;
       overflow-y: auto;
     }
@@ -694,6 +839,83 @@ import { Location } from '../../../../core/models/location.model';
     .bio-btn--confirm:hover:not(:disabled) { background: #16a34a; box-shadow: 0 0 16px rgba(22,163,74,0.5); }
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .employees-page {
+        padding: 1rem;
+      }
+
+      .header {
+        align-items: flex-start;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      th, td {
+        padding: 0.75rem 0.625rem;
+        font-size: 0.875rem;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+
+      .modal {
+        padding: 1.25rem;
+      }
+
+      .bio-panel {
+        padding: 1.25rem;
+      }
+
+      .bio-thumb img,
+      .bio-thumb__empty {
+        width: 56px;
+        height: 56px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .employees-page {
+        padding: 0.75rem;
+      }
+
+      /* Hide table, show cards */
+      .desktop-table {
+        display: none;
+      }
+
+      .mobile-cards {
+        display: block;
+      }
+
+      .modal {
+        padding: 1rem;
+      }
+
+      .modal-actions {
+        flex-direction: column-reverse;
+      }
+
+      .modal-actions .btn {
+        width: 100%;
+        text-align: center;
+      }
+
+      .bio-actions {
+        flex-wrap: wrap;
+      }
+
+      .bio-btn {
+        flex: 1;
+        justify-content: center;
+      }
+    }
   `],
 })
 export class EmployeesComponent implements OnInit {

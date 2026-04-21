@@ -9,6 +9,7 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 RUN npm ci --prefer-offline --legacy-peer-deps
 
+ARG CACHEBUST=2
 COPY . .
 RUN npm run build -- --configuration production
 

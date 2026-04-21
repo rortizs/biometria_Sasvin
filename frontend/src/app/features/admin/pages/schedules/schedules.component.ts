@@ -285,7 +285,7 @@ interface WeekDay {
                   </div>
                   <div class="form-group">
                     <label for="patternGrace">Tolerancia (min)</label>
-                    <input id="patternGrace" type="number" [(ngModel)]="patternForm.grace_minutes" />
+                    <input id="patternGrace" type="number" [(ngModel)]="patternForm.tolerance_minutes" />
                   </div>
                   <div class="form-group full-width">
                     <label for="patternDesc">Descripcion</label>
@@ -699,7 +699,7 @@ interface WeekDay {
     .calendar-table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 1200px;
+      min-width: 800px;
     }
 
     .calendar-table th,
@@ -1112,16 +1112,23 @@ interface WeekDay {
 
       .header-actions .btn {
         flex: 1;
+        min-width: 120px;
         justify-content: center;
       }
 
       .filters-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
       }
 
       .week-navigation {
         flex-direction: column;
         gap: 0.75rem;
+        text-align: center;
+      }
+
+      .nav-btn {
+        width: 100%;
+        justify-content: center;
       }
 
       .bulk-actions {
@@ -1140,6 +1147,61 @@ interface WeekDay {
 
       .form-group.full-width {
         grid-column: span 1;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .schedules-page {
+        padding: 0.75rem;
+      }
+
+      .filters-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .header-actions .btn {
+        flex: 1 1 calc(50% - 0.375rem);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .header-actions .btn {
+        flex: 1 1 100%;
+      }
+
+      .calendar-table {
+        min-width: 600px;
+        font-size: 0.75rem;
+      }
+
+      .col-id,
+      .col-department {
+        display: none;
+      }
+
+      .col-name,
+      .col-lastname {
+        width: 90px;
+      }
+
+      .col-pattern {
+        width: 80px;
+      }
+
+      .col-day {
+        min-width: 70px;
+      }
+
+      .schedule-time {
+        font-size: 0.6875rem;
+      }
+
+      .modal {
+        max-width: 100%;
+      }
+
+      .bulk-actions {
+        padding: 0.75rem 1rem;
       }
     }
   `],
@@ -1487,7 +1549,7 @@ export class SchedulesComponent implements OnInit {
       description: pattern.description || '',
       check_in_time: this.formatTime(pattern.check_in_time),
       check_out_time: this.formatTime(pattern.check_out_time),
-      grace_minutes: pattern.grace_minutes,
+      tolerance_minutes: pattern.tolerance_minutes,
       color: pattern.color,
     };
   }
@@ -1504,7 +1566,7 @@ export class SchedulesComponent implements OnInit {
       description: this.patternForm.description || undefined,
       check_in_time: this.patternForm.check_in_time + ':00',
       check_out_time: this.patternForm.check_out_time + ':00',
-      grace_minutes: this.patternForm.grace_minutes,
+      tolerance_minutes: this.patternForm.tolerance_minutes,
       color: this.patternForm.color,
     };
 
@@ -1698,7 +1760,7 @@ export class SchedulesComponent implements OnInit {
       description: '',
       check_in_time: '08:00',
       check_out_time: '17:00',
-      grace_minutes: 15,
+      tolerance_minutes: 15,
       color: '#4CAF50',
     };
   }

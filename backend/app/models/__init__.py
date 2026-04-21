@@ -1,4 +1,4 @@
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.employee import Employee
 from app.models.face_embedding import FaceEmbedding
 from app.models.biometric_face_session import BiometricFaceSession
@@ -15,9 +15,16 @@ from app.models.settings import Settings
 from app.models.position import Position
 from app.models.department import Department
 from app.models.location import Location
+from app.models.permission_request import (
+    PermissionRequest,
+    PermissionRequestStatus,
+    RejectionStage,
+)
+from app.models.notification import Notification
 
 __all__ = [
     "User",
+    "UserRole",
     "Employee",
     "FaceEmbedding",
     "AttendanceRecord",
@@ -32,4 +39,8 @@ __all__ = [
     "Department",
     "Location",
     "BiometricFaceSession",
+    "PermissionRequest",
+    "PermissionRequestStatus",
+    "RejectionStage",
+    "Notification",
 ]

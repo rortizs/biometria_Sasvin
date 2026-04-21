@@ -340,6 +340,80 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
       gap: 0.75rem;
       margin-top: 1.5rem;
     }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .locations-page {
+        padding: 1rem;
+      }
+
+      .header {
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      .content {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+
+      .map-container {
+        min-height: 300px;
+        height: 300px;
+      }
+
+      #map {
+        min-height: 300px;
+        height: 300px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .card-actions {
+        gap: 0.5rem;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .locations-page {
+        padding: 0.75rem;
+      }
+
+      .header {
+        margin-bottom: 1rem;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+        margin-top: 0.25rem;
+      }
+
+      .modal {
+        padding: 1.25rem;
+      }
+
+      .modal-actions {
+        flex-direction: column-reverse;
+      }
+
+      .modal-actions .btn {
+        width: 100%;
+        text-align: center;
+      }
+
+      .location-card {
+        padding: 0.875rem;
+      }
+    }
   `],
 })
 export class LocationsComponent implements OnInit, AfterViewInit {
@@ -487,14 +561,15 @@ export class LocationsComponent implements OnInit, AfterViewInit {
     }).addTo(this.modalMap);
 
     this.modalMarker.on('dragend', () => {
-      const pos = this.modalMarker!.getLatLng();
+      const pos = this.modalMarker!.getLatLng().wrap();
       this.formData.latitude = Math.round(pos.lat * 1000000) / 1000000;
       this.formData.longitude = Math.round(pos.lng * 1000000) / 1000000;
     });
 
     this.modalMap.on('click', (e: L.LeafletMouseEvent) => {
-      this.formData.latitude = Math.round(e.latlng.lat * 1000000) / 1000000;
-      this.formData.longitude = Math.round(e.latlng.lng * 1000000) / 1000000;
+      const pos = e.latlng.wrap();
+      this.formData.latitude = Math.round(pos.lat * 1000000) / 1000000;
+      this.formData.longitude = Math.round(pos.lng * 1000000) / 1000000;
       this.modalMarker?.setLatLng(e.latlng);
     });
   }

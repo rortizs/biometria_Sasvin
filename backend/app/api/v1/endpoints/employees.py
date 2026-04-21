@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin
+from app.api.deps import get_db, get_current_active_admin, get_current_user, get_current_secretaria_or_above
 from app.models.employee import Employee
 from app.models.user import User
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeResponse
@@ -19,18 +19,18 @@ router = APIRouter()
     response_model=list[EmployeeResponse],
     tags=["employees"],
     responses={
-        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        401: {"description": "Token inválido o expirado"},
     },
 )
 async def list_employees(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_user)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[EmployeeResponse]:
     """
-    Listar empleados/catedráticos registrados en el sistema. Requiere rol admin.
+    Listar empleados/catedráticos registrados en el sistema. Requiere autenticación.
 
     **Paginación:** usar `skip` y `limit` (máx. 1000 por request).
     Los resultados se ordenan alfabéticamente por apellido y nombre.
@@ -78,17 +78,17 @@ async def list_employees(
     response_model=EmployeeResponse,
     tags=["employees"],
     responses={
-        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        401: {"description": "Token inválido o expirado"},
         404: {"description": "Empleado no encontrado"},
     },
 )
 async def get_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_user)],
     employee_id: UUID,
 ) -> EmployeeResponse:
     """
-    Obtener los datos de un empleado por su UUID. Requiere rol admin.
+    Obtener los datos de un empleado por su UUID. Requiere autenticación.
 
     Incluye el estado de registro facial (`has_face_registered`) y las referencias
     a departamento, puesto y sede asignados.
@@ -131,16 +131,17 @@ async def get_employee(
     tags=["employees"],
     responses={
         400: {"description": "El `employee_code` ya existe — debe ser único en el sistema"},
-        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        401: {"description": "Token inválido o expirado"},
+        403: {"description": "Permisos insuficientes"},
     },
 )
 async def create_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     employee_in: EmployeeCreate,
 ) -> EmployeeResponse:
     """
-    Crear un nuevo empleado/catedrático. Requiere rol admin.
+    Crear un nuevo empleado/catedrático. Requiere rol secretaria o superior.
 
     El `employee_code` debe ser único (p.ej. `EMP-001`, número de carné, código institucional).
     El email también es requerido y se usa solo para identificación interna — no se envían correos.
@@ -185,18 +186,19 @@ async def create_employee(
     response_model=EmployeeResponse,
     tags=["employees"],
     responses={
-        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        401: {"description": "Token inválido o expirado"},
+        403: {"description": "Permisos insuficientes"},
         404: {"description": "Empleado no encontrado"},
     },
 )
 async def update_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     employee_id: UUID,
     employee_in: EmployeeUpdate,
 ) -> EmployeeResponse:
     """
-    Actualizar parcialmente los datos de un empleado. Requiere rol admin.
+    Actualizar parcialmente los datos de un empleado. Requiere rol secretaria o superior.
 
     Solo se actualizan los campos incluidos en el body (PATCH semántico).
     Para dar de baja a un empleado sin eliminarlo, usar `is_active: false`.
@@ -248,6 +250,7 @@ async def update_employee(
     tags=["employees"],
     responses={
         401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        403: {"description": "Solo el admin puede eliminar empleados"},
         404: {"description": "Empleado no encontrado"},
     },
 )

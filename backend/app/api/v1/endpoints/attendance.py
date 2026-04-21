@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin
+from app.api.deps import get_db, get_current_active_admin, get_current_user
 from app.models.attendance import AttendanceRecord
 from app.models.employee import Employee
 from app.models.location import Location
@@ -329,12 +329,12 @@ async def check_out(
     response_model=list[AttendanceResponse],
     tags=["attendance"],
     responses={
-        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        401: {"description": "Token inválido o expirado"},
     },
 )
 async def list_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_user)],
     record_date: date | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -344,7 +344,7 @@ async def list_attendance(
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[AttendanceResponse]:
     """
-    Listar registros de asistencia con filtros opcionales. Requiere rol admin.
+    Listar registros de asistencia con filtros opcionales. Requiere autenticación.
 
     **Filtros disponibles (todos opcionales, combinables):**
     - `record_date` — fecha exacta (YYYY-MM-DD)
@@ -399,15 +399,15 @@ async def list_attendance(
     response_model=list[AttendanceResponse],
     tags=["attendance"],
     responses={
-        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        401: {"description": "Token inválido o expirado"},
     },
 )
 async def list_today_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[AttendanceResponse]:
     """
-    Listar todos los registros de asistencia del día de hoy. Requiere rol admin.
+    Listar todos los registros de asistencia del día de hoy. Requiere autenticación.
 
     Shortcut de `GET /` filtrado por la fecha actual del servidor.
     Los resultados se ordenan por hora de check-in descendente (el más reciente primero).

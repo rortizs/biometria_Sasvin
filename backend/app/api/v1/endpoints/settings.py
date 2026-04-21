@@ -17,9 +17,6 @@ router = APIRouter()
     "/",
     response_model=SettingsResponse,
     tags=["settings"],
-    responses={
-        404: {"description": "Configuración no inicializada — ejecutar seed de datos"},
-    },
 )
 async def get_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -27,17 +24,21 @@ async def get_settings(
     """
     Obtener la configuración global del sistema.
 
-    Registro singleton — solo puede existir uno. Si no está inicializado,
-    ejecutar el seed de datos o usar `POST /settings/` para crearlo.
+    Registro singleton — si no existe, se inicializa automáticamente con valores por defecto.
     """
     result = await db.execute(select(Settings).limit(1))
     settings = result.scalar_one_or_none()
 
     if not settings:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Settings not configured. Please run seed data.",
+        settings = Settings(
+            company_name="Universidad Mariano Gálvez",
+            email_domain="miumg.edu.gt",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
         )
+        db.add(settings)
+        await db.commit()
+        await db.refresh(settings)
 
     return settings
 

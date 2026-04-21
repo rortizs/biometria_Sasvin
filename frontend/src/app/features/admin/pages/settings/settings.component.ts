@@ -239,6 +239,41 @@ import { Settings, SettingsUpdate } from '../../../../core/models/settings.model
       padding: 2rem;
       color: #6b7280;
     }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .settings-page {
+        padding: 1rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .settings-page {
+        padding: 0.75rem;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+      }
+
+      .settings-card,
+      .info-card {
+        padding: 1.25rem;
+      }
+
+      .form-actions {
+        margin-top: 1.25rem;
+      }
+
+      .btn {
+        width: 100%;
+        text-align: center;
+      }
+    }
   `],
 })
 export class SettingsComponent implements OnInit {
