@@ -6,11 +6,12 @@ import { AttendanceService } from '../../../../core/services/attendance.service'
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { AttendanceRecord } from '../../../../core/models/attendance.model';
 import { Employee } from '../../../../core/models/employee.model';
+import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, NotificationBellComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -20,6 +21,7 @@ import { Employee } from '../../../../core/models/employee.model';
           <p>Bienvenido, {{ authService.user()?.full_name || authService.user()?.email }}</p>
         </div>
         <div class="header-right">
+          <app-notification-bell />
           <a routerLink="/kiosk" class="btn btn-secondary">Ir al Kiosko</a>
           <button class="btn btn-outline" (click)="logout()">Cerrar Sesión</button>
         </div>
@@ -81,6 +83,11 @@ import { Employee } from '../../../../core/models/employee.model';
           <div class="nav-icon">🎓</div>
           <h3>Puestos</h3>
           <p>Gestionar cargos y puestos</p>
+        </a>
+        <a routerLink="/admin/permission-requests" class="nav-card">
+          <div class="nav-icon">📝</div>
+          <h3>Solicitudes</h3>
+          <p>Revisar y aprobar permisos</p>
         </a>
         <a routerLink="/admin/settings" class="nav-card">
           <div class="nav-icon">⚙️</div>
@@ -152,6 +159,7 @@ import { Employee } from '../../../../core/models/employee.model';
     .header-right {
       display: flex;
       gap: 0.75rem;
+      align-items: center;
     }
 
     .btn {

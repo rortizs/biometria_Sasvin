@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { PositionService } from '../../../../core/services/position.service';
 import { Position } from '../../../../core/models/position.model';
+import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 
 @Component({
   selector: 'app-positions',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, NotificationBellComponent],
   template: `
     <div class="page">
       <header class="header">
@@ -16,7 +17,10 @@ import { Position } from '../../../../core/models/position.model';
           <a routerLink="/admin/dashboard" class="back-link">← Dashboard</a>
           <h1>Puestos / Cargos</h1>
         </div>
-        <button class="btn btn-primary" (click)="openCreateModal()">+ Nuevo Puesto</button>
+        <div class="header-right">
+          <app-notification-bell />
+          <button class="btn btn-primary" (click)="openCreateModal()">+ Nuevo Puesto</button>
+        </div>
       </header>
 
       <!-- Table -->
@@ -99,6 +103,7 @@ import { Position } from '../../../../core/models/position.model';
   styles: [`
     .page { min-height: 100dvh; background: #f3f4f6; padding: 2rem; }
     .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
+    .header-right { display: flex; align-items: center; gap: 0.75rem; }
     .back-link { color: #6b7280; text-decoration: none; font-size: 0.875rem; display: block; margin-bottom: 0.25rem; }
     h1 { font-size: 1.8rem; color: #1f2937; margin: 0; }
     .table-container { background: white; border-radius: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }

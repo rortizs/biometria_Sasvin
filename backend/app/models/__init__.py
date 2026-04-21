@@ -20,6 +20,7 @@ from app.models.permission_request import (
     PermissionRequestStatus,
     RejectionStage,
 )
+from app.models.notification import Notification
 
 __all__ = [
     "User",
@@ -41,4 +42,5 @@ __all__ = [
     "PermissionRequest",
     "PermissionRequestStatus",
     "RejectionStage",
+    "Notification",
 ]

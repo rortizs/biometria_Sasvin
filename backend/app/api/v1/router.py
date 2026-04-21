@@ -11,6 +11,8 @@ from app.api.v1.endpoints import (
     locations,
     schedules,
     permission_requests,
+    notifications,
+    websocket,
 )
 
 api_router = APIRouter()
@@ -29,3 +31,9 @@ api_router.include_router(
     prefix="/permission-requests",
     tags=["permission-requests"],
 )
+api_router.include_router(
+    notifications.router,
+    prefix="/notifications",
+    tags=["notifications"],
+)
+api_router.include_router(websocket.router, tags=["websocket"])

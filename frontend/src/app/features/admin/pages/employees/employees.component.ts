@@ -2,6 +2,7 @@ import { Component, OnInit, ViewChild, ElementRef, inject, signal } from '@angul
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import { forkJoin } from 'rxjs';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { PositionService } from '../../../../core/services/position.service';
@@ -16,7 +17,7 @@ import { Location } from '../../../../core/models/location.model';
 @Component({
   selector: 'app-employees',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, NotificationBellComponent],
   template: `
     <div class="employees-page">
       <header class="header">
@@ -24,9 +25,12 @@ import { Location } from '../../../../core/models/location.model';
           <a routerLink="/admin/dashboard" class="back-link">← Dashboard</a>
           <h1>Empleados</h1>
         </div>
-        <button class="btn btn-primary" (click)="openCreateModal()">
-          + Nuevo Empleado
-        </button>
+        <div class="header-right">
+          <app-notification-bell />
+          <button class="btn btn-primary" (click)="openCreateModal()">
+            + Nuevo Empleado
+          </button>
+        </div>
       </header>
 
       <!-- Desktop table -->
