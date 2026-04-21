@@ -405,7 +405,7 @@ import { Location } from '../../../../core/models/location.model';
       padding: 2rem;
       border-radius: 1rem;
       width: 100%;
-      max-width: 550px;
+      max-width: 720px;
       max-height: 90vh;
       overflow-y: auto;
     }
