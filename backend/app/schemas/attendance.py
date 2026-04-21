@@ -1,7 +1,16 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+
+
+def _as_utc(dt: datetime | None) -> str | None:
+    """Serialize naive datetime as UTC ISO 8601 with +00:00 offset."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 _BASE64_IMAGE_EXAMPLE = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBg..."
 
@@ -109,8 +118,11 @@ class AttendanceResponse(BaseModel):
     geo_validated: bool = False
     distance_meters: float | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer('check_in', 'check_out')
+    def serialize_datetime(self, dt: datetime | None) -> str | None:
+        return _as_utc(dt)
 
 
 class AttendanceRecordResponse(BaseModel):
@@ -134,5 +146,8 @@ class AttendanceRecordResponse(BaseModel):
     geo_validated: bool = False
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer('check_in', 'check_out', 'created_at')
+    def serialize_datetime(self, dt: datetime | None) -> str | None:
+        return _as_utc(dt)
