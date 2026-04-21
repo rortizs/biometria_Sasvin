@@ -1,9 +1,10 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, catchError, of, throwError } from 'rxjs';
+import { Observable, tap, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { User, LoginRequest, TokenResponse } from '../models/user.model';
+import { WebSocketNotificationService } from './websocket-notification.service';
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -14,6 +15,7 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly wsNotif = inject(WebSocketNotificationService);
   private readonly baseUrl = environment.apiUrl;
 
   private readonly currentUser = signal<User | null>(null);
@@ -23,6 +25,7 @@ export class AuthService {
   readonly loading = this.isLoading.asReadonly();
   readonly isAuthenticated = computed(() => !!this.currentUser());
   readonly isAdmin = computed(() => this.currentUser()?.role === 'admin');
+  readonly isCoordinadorOrAbove = computed(() => ['admin', 'director', 'coordinador'].includes(this.currentUser()?.role ?? ''));
 
   constructor() {
     this.loadCurrentUser();
@@ -42,6 +45,7 @@ export class AuthService {
         tap((response) => {
           this.setTokens(response);
           this.loadCurrentUser();
+          this.wsNotif.connect(response.access_token);
         }),
         catchError((error) => {
           this.isLoading.set(false);
@@ -51,6 +55,7 @@ export class AuthService {
   }
 
   logout(): void {
+    this.wsNotif.disconnect();
     this.clearTokens();
     this.currentUser.set(null);
     this.router.navigate(['/auth/login']);
@@ -92,6 +97,8 @@ export class AuthService {
       next: (user) => {
         this.currentUser.set(user);
         this.isLoading.set(false);
+        // Reconnect WebSocket when user is loaded from stored token
+        this.wsNotif.connect(token);
       },
       error: () => {
         this.clearTokens();

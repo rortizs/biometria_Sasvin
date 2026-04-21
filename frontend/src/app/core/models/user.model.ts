@@ -7,7 +7,13 @@ export interface User {
   created_at: string;
 }
 
-export type UserRole = 'admin' | 'supervisor';
+export type UserRole =
+  | 'admin'
+  | 'director'
+  | 'coordinador'
+  | 'secretaria'
+  | 'catedratico'
+  | 'supervisor'; // legacy — keep for backward compat
 
 export interface LoginRequest {
   username: string;

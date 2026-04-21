@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import { forkJoin } from 'rxjs';
 import { AttendanceService } from '../../../../core/services/attendance.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
@@ -31,7 +32,7 @@ interface AttendanceSummary {
 @Component({
   selector: 'app-attendance',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [CommonModule, FormsModule, RouterLink, DatePipe, DecimalPipe, NotificationBellComponent],
   template: `
     <div class="attendance-page">
       <header class="header">
@@ -42,10 +43,13 @@ interface AttendanceSummary {
           <h1>Control de Asistencia</h1>
           <p class="subtitle">Monitoreo y reportes de asistencia del personal</p>
         </div>
-        <button class="export-btn" (click)="exportToCSV()" [disabled]="loading() || filteredAttendance().length === 0">
+        <div class="header-actions" style="display:flex;align-items:center;gap:0.75rem;">
+          <app-notification-bell />
+          <button class="export-btn" (click)="exportToCSV()" [disabled]="loading() || filteredAttendance().length === 0">
           <span class="export-icon">&#8681;</span>
           Exportar CSV
         </button>
+        </div>
       </header>
 
       <!-- Summary Cards -->

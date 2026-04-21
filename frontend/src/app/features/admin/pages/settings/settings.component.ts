@@ -2,13 +2,14 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import { SettingsService } from '../../../../core/services/settings.service';
 import { Settings, SettingsUpdate } from '../../../../core/models/settings.model';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, NotificationBellComponent],
   template: `
     <div class="settings-page">
       <header class="header">
@@ -16,6 +17,7 @@ import { Settings, SettingsUpdate } from '../../../../core/models/settings.model
           <a routerLink="/admin/dashboard" class="back-link">← Dashboard</a>
           <h1>Configuración</h1>
         </div>
+        <app-notification-bell />
       </header>
 
       @if (loading()) {
