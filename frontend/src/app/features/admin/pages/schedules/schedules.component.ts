@@ -285,7 +285,7 @@ interface WeekDay {
                   </div>
                   <div class="form-group">
                     <label for="patternGrace">Tolerancia (min)</label>
-                    <input id="patternGrace" type="number" [(ngModel)]="patternForm.grace_minutes" />
+                    <input id="patternGrace" type="number" [(ngModel)]="patternForm.tolerance_minutes" />
                   </div>
                   <div class="form-group full-width">
                     <label for="patternDesc">Descripcion</label>
@@ -1487,7 +1487,7 @@ export class SchedulesComponent implements OnInit {
       description: pattern.description || '',
       check_in_time: this.formatTime(pattern.check_in_time),
       check_out_time: this.formatTime(pattern.check_out_time),
-      grace_minutes: pattern.grace_minutes,
+      tolerance_minutes: pattern.tolerance_minutes,
       color: pattern.color,
     };
   }
@@ -1504,7 +1504,7 @@ export class SchedulesComponent implements OnInit {
       description: this.patternForm.description || undefined,
       check_in_time: this.patternForm.check_in_time + ':00',
       check_out_time: this.patternForm.check_out_time + ':00',
-      grace_minutes: this.patternForm.grace_minutes,
+      tolerance_minutes: this.patternForm.tolerance_minutes,
       color: this.patternForm.color,
     };
 
@@ -1698,7 +1698,7 @@ export class SchedulesComponent implements OnInit {
       description: '',
       check_in_time: '08:00',
       check_out_time: '17:00',
-      grace_minutes: 15,
+      tolerance_minutes: 15,
       color: '#4CAF50',
     };
   }
