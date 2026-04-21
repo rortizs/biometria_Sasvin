@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_active_admin
+from app.api.deps import get_db, get_current_active_admin, get_current_secretaria_or_above
 from app.models.location import Location
 from app.models.user import User
 from app.schemas.location import LocationCreate, LocationUpdate, LocationResponse
@@ -66,14 +66,17 @@ async def get_location(
     response_model=LocationResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["locations"],
+    responses={
+        403: {"description": "Permisos insuficientes"},
+    },
 )
 async def create_location(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     location_in: LocationCreate,
 ) -> Location:
     """
-    Crear una nueva sede de trabajo. Requiere rol admin.
+    Crear una nueva sede de trabajo. Requiere rol secretaria o superior.
 
     El `radius_meters` define el radio en metros alrededor de las coordenadas GPS
     dentro del cual se considera válida la geolocalización de un empleado al hacer
@@ -91,16 +94,17 @@ async def create_location(
     response_model=LocationResponse,
     tags=["locations"],
     responses={
+        403: {"description": "Permisos insuficientes"},
         404: {"description": "Sede no encontrada"},
     },
 )
 async def update_location(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     location_id: UUID,
     location_in: LocationUpdate,
 ) -> Location:
-    """Actualizar una sede parcialmente. Requiere rol admin."""
+    """Actualizar una sede parcialmente. Requiere rol secretaria o superior."""
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
 
@@ -124,6 +128,8 @@ async def update_location(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["locations"],
     responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        403: {"description": "Solo el admin puede eliminar sedes"},
         404: {"description": "Sede no encontrada"},
     },
 )

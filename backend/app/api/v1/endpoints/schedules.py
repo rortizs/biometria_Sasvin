@@ -7,7 +7,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin, get_current_user
+from app.api.deps import get_db, get_current_active_admin, get_current_user, get_current_secretaria_or_above
 from app.models.schedule import (
     Schedule,
     EmployeeSchedule,
@@ -97,14 +97,15 @@ async def get_schedule_pattern(
     tags=["schedules"],
     responses={
         400: {"description": "Ya existe un patrón con ese nombre"},
+        403: {"description": "Permisos insuficientes"},
     },
 )
 async def create_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     pattern_in: ScheduleCreate,
 ) -> Schedule:
-    """Crear un nuevo patrón de horario reutilizable. Requiere rol admin. El nombre debe ser único."""
+    """Crear un nuevo patrón de horario reutilizable. Requiere rol secretaria o superior. El nombre debe ser único."""
     result = await db.execute(select(Schedule).where(Schedule.name == pattern_in.name))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -124,16 +125,17 @@ async def create_schedule_pattern(
     response_model=ScheduleResponse,
     tags=["schedules"],
     responses={
+        403: {"description": "Permisos insuficientes"},
         404: {"description": "Patrón de horario no encontrado"},
     },
 )
 async def update_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     pattern_id: UUID,
     pattern_in: ScheduleUpdate,
 ) -> Schedule:
-    """Actualizar un patrón de horario parcialmente. Requiere rol admin."""
+    """Actualizar un patrón de horario parcialmente. Requiere rol secretaria o superior."""
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
@@ -155,6 +157,7 @@ async def update_schedule_pattern(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["schedules"],
     responses={
+        403: {"description": "Solo el admin puede eliminar patrones"},
         404: {"description": "Patrón de horario no encontrado"},
     },
 )
@@ -214,14 +217,17 @@ async def list_assignments(
     response_model=ScheduleAssignmentResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["schedules"],
+    responses={
+        403: {"description": "Permisos insuficientes"},
+    },
 )
 async def create_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     assignment_in: ScheduleAssignmentCreate,
 ) -> ScheduleAssignment:
     """
-    Asignar un patrón de horario a un empleado para una fecha específica. Requiere rol admin.
+    Asignar un patrón de horario a un empleado para una fecha específica. Requiere rol secretaria o superior.
 
     Comportamiento upsert: si ya existe una asignación para ese empleado y fecha,
     la actualiza en lugar de crear un duplicado.
@@ -265,14 +271,17 @@ async def create_assignment(
     "/assignments/bulk",
     status_code=status.HTTP_201_CREATED,
     tags=["schedules"],
+    responses={
+        403: {"description": "Permisos insuficientes"},
+    },
 )
 async def create_bulk_assignments(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     bulk_in: BulkAssignmentCreate,
 ) -> dict:
     """
-    Asignar un patrón de horario a múltiples empleados y fechas en una sola llamada. Requiere rol admin.
+    Asignar un patrón de horario a múltiples empleados y fechas en una sola llamada. Requiere rol secretaria o superior.
 
     Útil para configurar horarios semanales o quincenales en bloque.
     Acepta listas de `employee_ids` y `dates` — genera el producto cartesiano de ambas.
@@ -319,6 +328,7 @@ async def create_bulk_assignments(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["schedules"],
     responses={
+        403: {"description": "Solo el admin puede eliminar asignaciones"},
         404: {"description": "Asignación no encontrada"},
     },
 )
@@ -395,14 +405,17 @@ async def list_exceptions(
     response_model=ScheduleExceptionResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["schedules"],
+    responses={
+        403: {"description": "Permisos insuficientes"},
+    },
 )
 async def create_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     exception_in: ScheduleExceptionCreate,
 ) -> ScheduleException:
     """
-    Crear una excepción de horario. Requiere rol admin.
+    Crear una excepción de horario. Requiere rol secretaria o superior.
 
     Tipos disponibles: `vacation`, `holiday`, `sick_leave`, `permission`, `other`.
 
@@ -427,16 +440,17 @@ async def create_exception(
     response_model=ScheduleExceptionResponse,
     tags=["schedules"],
     responses={
+        403: {"description": "Permisos insuficientes"},
         404: {"description": "Excepción no encontrada"},
     },
 )
 async def update_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     exception_id: UUID,
     exception_in: ScheduleExceptionUpdate,
 ) -> ScheduleException:
-    """Actualizar una excepción de horario parcialmente. Requiere rol admin."""
+    """Actualizar una excepción de horario parcialmente. Requiere rol secretaria o superior."""
     result = await db.execute(
         select(ScheduleException).where(ScheduleException.id == exception_id)
     )
@@ -460,6 +474,7 @@ async def update_exception(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["schedules"],
     responses={
+        403: {"description": "Solo el admin puede eliminar excepciones"},
         404: {"description": "Excepción no encontrada"},
     },
 )

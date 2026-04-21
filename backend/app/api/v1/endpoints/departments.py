@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_active_admin
+from app.api.deps import get_db, get_current_active_admin, get_current_secretaria_or_above
 from app.models.department import Department
 from app.models.user import User
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
@@ -66,13 +66,16 @@ async def get_department(
     response_model=DepartmentResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["departments"],
+    responses={
+        403: {"description": "Permisos insuficientes"},
+    },
 )
 async def create_department(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     department_in: DepartmentCreate,
 ) -> Department:
-    """Crear un nuevo departamento o facultad. Requiere rol admin."""
+    """Crear un nuevo departamento o facultad. Requiere rol secretaria o superior."""
     department = Department(**department_in.model_dump())
     db.add(department)
     await db.commit()
@@ -85,16 +88,17 @@ async def create_department(
     response_model=DepartmentResponse,
     tags=["departments"],
     responses={
+        403: {"description": "Permisos insuficientes"},
         404: {"description": "Departamento no encontrado"},
     },
 )
 async def update_department(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
     department_id: UUID,
     department_in: DepartmentUpdate,
 ) -> Department:
-    """Actualizar un departamento parcialmente. Requiere rol admin."""
+    """Actualizar un departamento parcialmente. Requiere rol secretaria o superior."""
     result = await db.execute(select(Department).where(Department.id == department_id))
     department = result.scalar_one_or_none()
 
@@ -118,6 +122,8 @@ async def update_department(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["departments"],
     responses={
+        401: {"description": "Token inválido o expirado — se requiere rol admin"},
+        403: {"description": "Solo el admin puede eliminar departamentos"},
         404: {"description": "Departamento no encontrado"},
     },
 )
