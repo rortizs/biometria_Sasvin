@@ -31,6 +31,14 @@ export const routes: Routes = [
     ],
   },
   {
+    path: 'requests',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/requests/pages/my-requests/my-requests.component').then(
+        (m) => m.MyRequestsComponent
+      ),
+  },
+  {
     path: 'admin',
     canActivate: [authGuard, adminGuard],
     children: [
@@ -93,6 +101,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/admin/pages/positions/positions.component').then(
             (m) => m.PositionsComponent
+          ),
+      },
+      {
+        path: 'permission-requests',
+        loadComponent: () =>
+          import('./features/admin/pages/permission-requests/permission-requests.component').then(
+            (m) => m.AdminPermissionRequestsComponent
           ),
       },
     ],

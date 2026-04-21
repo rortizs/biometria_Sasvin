@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import { forkJoin, catchError, of } from 'rxjs';
 import { ScheduleService } from '../../../../core/services/schedule.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
@@ -44,6 +45,7 @@ interface WeekDay {
           <p class="subtitle">Gestion de horarios y asignaciones del personal</p>
         </div>
         <div class="header-actions">
+          <app-notification-bell />
           <button class="btn btn-outline" (click)="exportCalendar()">
             <span class="btn-icon">&#8681;</span> Exportar
           </button>

@@ -2,6 +2,7 @@ import { Component, OnInit, AfterViewInit, inject, signal, ElementRef, ViewChild
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import * as L from 'leaflet';
 import { LocationService } from '../../../../core/services/location.service';
 import { Location, LocationCreate } from '../../../../core/models/location.model';
@@ -9,7 +10,7 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
 @Component({
   selector: 'app-locations',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, NotificationBellComponent],
   template: `
     <div class="locations-page">
       <header class="header">
@@ -17,9 +18,12 @@ import { Location, LocationCreate } from '../../../../core/models/location.model
           <a routerLink="/admin/dashboard" class="back-link">← Dashboard</a>
           <h1>Sedes / Ubicaciones</h1>
         </div>
-        <button class="btn btn-primary" (click)="openCreateModal()">
-          + Nueva Sede
-        </button>
+        <div class="header-right" style="display:flex;align-items:center;gap:0.75rem;">
+          <app-notification-bell />
+          <button class="btn btn-primary" (click)="openCreateModal()">
+            + Nueva Sede
+          </button>
+        </div>
       </header>
 
       <div class="content">
