@@ -316,6 +316,92 @@ import { Employee } from '../../../../core/models/employee.model';
     .status.present { background: #dcfce7; color: #166534; }
     .status.late { background: #fef3c7; color: #92400e; }
     .status.absent { background: #fee2e2; color: #991b1b; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .dashboard {
+        padding: 1rem;
+      }
+
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .header-right {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+
+      .header-right .btn {
+        flex: 1;
+        text-align: center;
+        justify-content: center;
+      }
+
+      .header h1 {
+        font-size: 1.5rem;
+      }
+
+      .nav-cards {
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+      }
+
+      .nav-card {
+        padding: 1rem;
+      }
+
+      .nav-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .dashboard {
+        padding: 0.75rem;
+      }
+
+      .header h1 {
+        font-size: 1.25rem;
+      }
+
+      .nav-cards {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+      }
+
+      .nav-card {
+        padding: 0.875rem;
+      }
+
+      .nav-card p {
+        display: none;
+      }
+
+      .stat-card {
+        padding: 1rem;
+      }
+
+      .stat-value {
+        font-size: 1.25rem;
+      }
+
+      th, td {
+        padding: 0.5rem;
+        font-size: 0.8125rem;
+      }
+    }
   `],
 })
 export class DashboardComponent implements OnInit {
