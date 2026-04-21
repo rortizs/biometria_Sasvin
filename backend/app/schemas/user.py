@@ -3,11 +3,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.models.user import UserRole
+
 
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str | None = None
-    role: str = "admin"
+    role: UserRole = UserRole.admin
 
 
 class UserCreate(UserBase):
