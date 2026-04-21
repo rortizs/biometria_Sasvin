@@ -1,6 +1,17 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, employees, faces, attendance, settings, positions, departments, locations, schedules
+from app.api.v1.endpoints import (
+    auth,
+    employees,
+    faces,
+    attendance,
+    settings,
+    positions,
+    departments,
+    locations,
+    schedules,
+    permission_requests,
+)
 
 api_router = APIRouter()
 
@@ -13,3 +24,8 @@ api_router.include_router(positions.router, prefix="/positions", tags=["position
 api_router.include_router(departments.router, prefix="/departments", tags=["departments"])
 api_router.include_router(locations.router, prefix="/locations", tags=["locations"])
 api_router.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
+api_router.include_router(
+    permission_requests.router,
+    prefix="/permission-requests",
+    tags=["permission-requests"],
+)

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.security import decode_token
 from app.db.session import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 
 settings = get_settings()
 
@@ -60,4 +60,34 @@ async def get_current_active_admin(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions",
         )
+    return current_user
+
+
+async def get_current_coordinador_or_above(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow coordinador, director, admin"""
+    allowed = {UserRole.coordinador, UserRole.director, UserRole.admin}
+    if current_user.role not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
+    return current_user
+
+
+async def get_current_director_or_above(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow director, admin"""
+    allowed = {UserRole.director, UserRole.admin}
+    if current_user.role not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
+    return current_user
+
+
+async def get_current_secretaria_or_above(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow secretaria, coordinador, director, admin"""
+    allowed = {UserRole.secretaria, UserRole.coordinador, UserRole.director, UserRole.admin}
+    if current_user.role not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
     return current_user
