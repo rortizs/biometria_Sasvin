@@ -5,7 +5,7 @@ export interface SchedulePattern {
   description: string | null;
   check_in_time: string; // "08:00:00"
   check_out_time: string; // "17:00:00"
-  grace_minutes: number;
+  tolerance_minutes: number;
   color: string; // hex color like "#4CAF50"
   is_active: boolean;
   created_at: string;
@@ -16,7 +16,7 @@ export interface SchedulePatternCreate {
   description?: string;
   check_in_time: string;
   check_out_time: string;
-  grace_minutes?: number;
+  tolerance_minutes?: number;
   color?: string;
 }
 
@@ -25,7 +25,7 @@ export interface SchedulePatternUpdate {
   description?: string;
   check_in_time?: string;
   check_out_time?: string;
-  grace_minutes?: number;
+  tolerance_minutes?: number;
   color?: string;
   is_active?: boolean;
 }
