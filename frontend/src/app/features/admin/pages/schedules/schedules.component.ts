@@ -699,7 +699,7 @@ interface WeekDay {
     .calendar-table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 1200px;
+      min-width: 800px;
     }
 
     .calendar-table th,
@@ -1112,16 +1112,23 @@ interface WeekDay {
 
       .header-actions .btn {
         flex: 1;
+        min-width: 120px;
         justify-content: center;
       }
 
       .filters-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
       }
 
       .week-navigation {
         flex-direction: column;
         gap: 0.75rem;
+        text-align: center;
+      }
+
+      .nav-btn {
+        width: 100%;
+        justify-content: center;
       }
 
       .bulk-actions {
@@ -1140,6 +1147,61 @@ interface WeekDay {
 
       .form-group.full-width {
         grid-column: span 1;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .schedules-page {
+        padding: 0.75rem;
+      }
+
+      .filters-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .header-actions .btn {
+        flex: 1 1 calc(50% - 0.375rem);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .header-actions .btn {
+        flex: 1 1 100%;
+      }
+
+      .calendar-table {
+        min-width: 600px;
+        font-size: 0.75rem;
+      }
+
+      .col-id,
+      .col-department {
+        display: none;
+      }
+
+      .col-name,
+      .col-lastname {
+        width: 90px;
+      }
+
+      .col-pattern {
+        width: 80px;
+      }
+
+      .col-day {
+        min-width: 70px;
+      }
+
+      .schedule-time {
+        font-size: 0.6875rem;
+      }
+
+      .modal {
+        max-width: 100%;
+      }
+
+      .bulk-actions {
+        padding: 0.75rem 1rem;
       }
     }
   `],

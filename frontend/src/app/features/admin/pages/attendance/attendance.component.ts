@@ -182,7 +182,8 @@ interface AttendanceSummary {
               <button class="clear-btn" (click)="clearFilters()">Limpiar filtros</button>
             </div>
           } @else {
-            <table>
+            <!-- Desktop table -->
+            <table class="desktop-table">
               <thead>
                 <tr>
                   <th>Empleado</th>
@@ -251,6 +252,56 @@ interface AttendanceSummary {
                 }
               </tbody>
             </table>
+
+            <!-- Mobile cards (visible only on <=480px) -->
+            <div class="mobile-cards">
+              @for (record of filteredAttendance(); track record.id) {
+                <div class="mobile-record-card">
+                  <div class="mobile-card-header">
+                    <span class="employee-name">{{ record.employee_name }}</span>
+                    <span class="status-badge" [class]="record.status">
+                      {{ getStatusLabel(record.status) }}
+                    </span>
+                  </div>
+                  <div class="mobile-card-body">
+                    <div class="mobile-field">
+                      <span class="mobile-label">Fecha</span>
+                      <span class="mobile-value">{{ record.record_date | date: 'dd/MM/yyyy' }}</span>
+                    </div>
+                    <div class="mobile-field">
+                      <span class="mobile-label">Entrada</span>
+                      <span class="mobile-value">
+                        @if (record.check_in) {
+                          <span class="time-badge check-in">{{ record.check_in | date: 'HH:mm' }}</span>
+                        } @else {
+                          <span class="time-badge no-time">-</span>
+                        }
+                      </span>
+                    </div>
+                    <div class="mobile-field">
+                      <span class="mobile-label">Salida</span>
+                      <span class="mobile-value">
+                        @if (record.check_out) {
+                          <span class="time-badge check-out">{{ record.check_out | date: 'HH:mm' }}</span>
+                        } @else {
+                          <span class="time-badge no-time">-</span>
+                        }
+                      </span>
+                    </div>
+                    <div class="mobile-field">
+                      <span class="mobile-label">Horas</span>
+                      <span class="mobile-value hours-worked">{{ calculateHoursWorked(record) }}</span>
+                    </div>
+                    @if (record.confidence) {
+                      <div class="mobile-field">
+                        <span class="mobile-label">Confianza</span>
+                        <span class="mobile-value">{{ (record.confidence * 100) | number: '1.0-0' }}%</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
           }
         </div>
       </section>
@@ -321,6 +372,7 @@ interface AttendanceSummary {
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s;
+      white-space: nowrap;
     }
 
     .export-btn:hover:not(:disabled) {
@@ -715,6 +767,54 @@ interface AttendanceSummary {
       color: #9ca3af;
     }
 
+    /* Mobile cards — hidden on desktop */
+    .mobile-cards {
+      display: none;
+    }
+
+    .mobile-record-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      overflow: hidden;
+    }
+
+    .mobile-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+      gap: 0.5rem;
+    }
+
+    .mobile-card-body {
+      padding: 0.75rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .mobile-field {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem;
+    }
+
+    .mobile-label {
+      color: #6b7280;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+    }
+
+    .mobile-value {
+      color: #1f2937;
+      font-weight: 500;
+    }
+
     /* Responsive */
     @media (max-width: 1200px) {
       .summary-cards {
@@ -754,7 +854,7 @@ interface AttendanceSummary {
       }
 
       .filters-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
       }
 
       .table-container {
@@ -766,9 +866,47 @@ interface AttendanceSummary {
       }
     }
 
+    @media (max-width: 600px) {
+      .filters-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
     @media (max-width: 480px) {
+      .attendance-page {
+        padding: 0.75rem;
+      }
+
       .summary-cards {
         grid-template-columns: 1fr;
+      }
+
+      .card {
+        padding: 0.875rem;
+      }
+
+      /* Hide table, show cards */
+      .desktop-table {
+        display: none;
+      }
+
+      .mobile-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem;
+      }
+
+      .table-header {
+        padding: 0.75rem 1rem;
+      }
+
+      .table-header h2 {
+        font-size: 1rem;
       }
     }
   `],
