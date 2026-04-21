@@ -16,20 +16,6 @@ class LocationBase(BaseModel):
     def default_radius_if_none(cls, v: object) -> object:
         return 50 if v is None else v
 
-    @field_validator("longitude", mode="before")
-    @classmethod
-    def wrap_longitude(cls, v: object) -> object:
-        if isinstance(v, (int, float)):
-            return ((float(v) + 180) % 360 + 360) % 360 - 180
-        return v
-
-    @field_validator("latitude", mode="before")
-    @classmethod
-    def clamp_latitude(cls, v: object) -> object:
-        if isinstance(v, (int, float)):
-            return max(-90.0, min(90.0, float(v)))
-        return v
-
 
 class LocationCreate(LocationBase):
     model_config = ConfigDict(
