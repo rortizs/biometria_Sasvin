@@ -1,6 +1,6 @@
 """rbac_tables_audit_log_schedule_columns
 
-Revision ID: a1b2c3d4e5f6
+Revision ID: 9f8e7d6c5b4a
 Revises: e5f6a7b8c9d0
 Create Date: 2026-04-22
 
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = 'a1b2c3d4e5f6'
+revision = '9f8e7d6c5b4a'
 down_revision = 'e5f6a7b8c9d0'
 branch_labels = None
 depends_on = None
@@ -69,9 +69,8 @@ PERMISSIONS = [
     ("roles.assign", "roles", "assign", "global", "Asignar roles a usuarios"),
 ]
 
-# Role → permission codes
 ROLE_PERMISSIONS = {
-    "admin": [p[0] for p in PERMISSIONS],  # all
+    "admin": [p[0] for p in PERMISSIONS],
     "director": [
         "employees.view", "employees.create", "employees.update",
         "attendance.view", "attendance.export",
@@ -188,7 +187,7 @@ def upgrade() -> None:
     op.create_index("ix_user_roles_role_id", "user_roles", ["role_id"])
 
     # ------------------------------------------------------------------
-    # 5. Add audit_action_type enum + audit_logs table
+    # 5. Create audit_action_type enum + audit_logs table
     # ------------------------------------------------------------------
     op.execute("""
         DO $$ BEGIN
@@ -307,38 +306,46 @@ def upgrade() -> None:
     op.bulk_insert(rp_table, rp_rows)
 
     # ------------------------------------------------------------------
-    # 11. Migrate existing users.role → user_roles junction
+    # 11. Migrate existing users.role → user_roles junction (Python UUIDs)
     # ------------------------------------------------------------------
-    op.execute(f"""
-        INSERT INTO user_roles (id, user_id, role_id, assigned_at)
-        SELECT
-            gen_random_uuid(),
-            u.id,
-            r.id,
-            NOW()
-        FROM users u
-        JOIN roles r ON r.name = u.role::text
-        ON CONFLICT (user_id, role_id) DO NOTHING;
-    """)
+    bind = op.get_bind()
+    users = bind.execute(sa.text("SELECT id, role::text AS role_name FROM users")).fetchall()
+    roles_map = {
+        row.name: str(row.id)
+        for row in bind.execute(sa.text("SELECT id, name FROM roles")).fetchall()
+    }
+    from datetime import datetime as dt_
+    ur_rows = [
+        {
+            "id": str(uuid.uuid4()),
+            "user_id": str(u.id),
+            "role_id": roles_map[u.role_name],
+            "assigned_at": dt_.utcnow(),
+        }
+        for u in users if u.role_name in roles_map
+    ]
+    if ur_rows:
+        bind.execute(
+            sa.text(
+                "INSERT INTO user_roles (id, user_id, role_id, assigned_at) "
+                "VALUES (:id, :user_id, :role_id, :assigned_at) "
+                "ON CONFLICT (user_id, role_id) DO NOTHING"
+            ),
+            ur_rows,
+        )
 
 
 def downgrade() -> None:
-    # Undo user_roles migration data
-    op.execute("DELETE FROM user_roles WHERE assigned_by IS NULL")
-
-    # Remove permission_requests columns
     op.drop_column("permission_requests", "hours_affected")
     op.drop_column("permission_requests", "end_time")
     op.drop_column("permission_requests", "start_time")
 
-    # Remove schedules columns
     op.drop_column("schedules", "net_hours")
     op.drop_column("schedules", "dinner_end")
     op.drop_column("schedules", "dinner_start")
     op.drop_column("schedules", "lunch_end")
     op.drop_column("schedules", "lunch_start")
 
-    # Drop audit_logs
     op.drop_index("ix_audit_logs_created_at")
     op.drop_index("ix_audit_logs_resource_type")
     op.drop_index("ix_audit_logs_action")
@@ -346,19 +353,15 @@ def downgrade() -> None:
     op.drop_table("audit_logs")
     op.execute("DROP TYPE IF EXISTS auditactiontype")
 
-    # Drop user_roles
     op.drop_index("ix_user_roles_role_id")
     op.drop_index("ix_user_roles_user_id")
     op.drop_table("user_roles")
 
-    # Drop role_permissions
     op.drop_table("role_permissions")
 
-    # Drop permissions
     op.drop_index("ix_permissions_module")
     op.drop_index("ix_permissions_code")
     op.drop_table("permissions")
 
-    # Drop roles
     op.drop_index("ix_roles_name")
     op.drop_table("roles")
