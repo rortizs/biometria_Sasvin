@@ -39,5 +39,8 @@ class User(Base):
 
     # Relationships (RBAC many-to-many via UserRoleAssignment)
     user_roles: Mapped[list["UserRoleAssignment"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
+        "UserRoleAssignment",
+        foreign_keys="[UserRoleAssignment.user_id]",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
