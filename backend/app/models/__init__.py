@@ -21,6 +21,10 @@ from app.models.permission_request import (
     RejectionStage,
 )
 from app.models.notification import Notification
+from app.models.role import Role
+from app.models.permission import Permission
+from app.models.role_permission import RolePermission, UserRoleAssignment
+from app.models.audit_log import AuditLog, AuditActionType
 
 __all__ = [
     "User",
@@ -43,4 +47,10 @@ __all__ = [
     "PermissionRequestStatus",
     "RejectionStage",
     "Notification",
+    "Role",
+    "Permission",
+    "RolePermission",
+    "UserRoleAssignment",
+    "AuditLog",
+    "AuditActionType",
 ]
