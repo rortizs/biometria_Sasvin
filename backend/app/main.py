@@ -57,8 +57,7 @@ openapi_tags = [
     {
         "name": "positions",
         "description": (
-            "Gestión de cargos y puestos. "
-            "El nombre del puesto debe ser único."
+            "Gestión de cargos y puestos. El nombre del puesto debe ser único."
         ),
     },
     {
@@ -124,8 +123,9 @@ El resultado se guarda en `geo_validated` pero **no bloquea** el registro de asi
     },
     openapi_tags=openapi_tags,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
 )
 
 # CORS middleware
@@ -156,5 +156,5 @@ async def root():
     return {
         "app": settings.app_name,
         "version": "1.0.0",
-        "docs": "/docs",
+        "docs": "/api/docs",
     }
