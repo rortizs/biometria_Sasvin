@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_db, get_current_user, get_current_active_admin
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -74,21 +74,25 @@ async def login(
     tags=["auth"],
     responses={
         400: {"description": "El email ya está registrado"},
+        401: {"description": "Token inválido o expirado — se requiere autenticación"},
+        403: {"description": "Solo el admin puede crear usuarios"},
     },
 )
 async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_admin: Annotated[User, Depends(get_current_active_admin)],
     user_in: UserCreate,
 ) -> User:
     """
-    Registrar un nuevo usuario administrador del sistema.
+    Registrar un nuevo usuario del sistema. Requiere rol admin.
 
     Este endpoint crea usuarios con acceso al panel de administración.
     No confundir con el registro de empleados (`POST /employees/`) —
     los empleados son las personas cuya asistencia se controla,
     los usuarios son quienes administran el sistema.
 
-    El email debe ser único. La contraseña se hashea con bcrypt antes de guardarse.
+    El email debe ser único y pertenecer al dominio @miumg.edu.gt.
+    La contraseña se hashea con bcrypt antes de guardarse.
     """
     result = await db.execute(select(User).where(User.email == user_in.email))
     existing_user = result.scalar_one_or_none()

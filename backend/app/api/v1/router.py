@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     websocket,
     roles,
     permissions,
+    users,
 )
 
 api_router = APIRouter()
@@ -41,3 +42,4 @@ api_router.include_router(
 api_router.include_router(websocket.router, tags=["websocket"])
 api_router.include_router(roles.router, prefix="/roles", tags=["roles"])
 api_router.include_router(permissions.router, prefix="/permissions", tags=["permissions"])
+api_router.include_router(users.router, prefix="/users", tags=["users"])

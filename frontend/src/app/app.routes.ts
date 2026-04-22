@@ -110,6 +110,16 @@ export const routes: Routes = [
             (m) => m.AdminPermissionRequestsComponent
           ),
       },
+      {
+        path: 'roles',
+        loadComponent: () =>
+          import('./features/admin/pages/roles/roles.component').then((m) => m.RolesComponent),
+      },
+      {
+        path: 'users',
+        loadComponent: () =>
+          import('./features/admin/pages/users/users.component').then((m) => m.UsersComponent),
+      },
     ],
   },
   {
