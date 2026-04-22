@@ -89,6 +89,16 @@ import { NotificationBellComponent } from '../../../../core/components/notificat
           <h3>Solicitudes</h3>
           <p>Revisar y aprobar permisos</p>
         </a>
+        <a routerLink="/admin/roles" class="nav-card">
+          <div class="nav-icon">🔑</div>
+          <h3>Roles</h3>
+          <p>Gestión de roles y permisos RBAC</p>
+        </a>
+        <a routerLink="/admin/users" class="nav-card">
+          <div class="nav-icon">🛡️</div>
+          <h3>Usuarios</h3>
+          <p>Gestionar usuarios del sistema</p>
+        </a>
         <a routerLink="/admin/settings" class="nav-card">
           <div class="nav-icon">⚙️</div>
           <h3>Configuración</h3>
