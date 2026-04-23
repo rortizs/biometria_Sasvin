@@ -8,6 +8,7 @@ export interface UserCreatePayload {
   password: string;
   full_name: string | null;
   role: UserRole;
+  employee_id?: string | null;
 }
 
 export interface UserUpdatePayload {
@@ -41,5 +42,9 @@ export class UserManagementService {
 
   createUser(data: UserCreatePayload): Observable<User> {
     return this.api.post<User>('/auth/register', data);
+  }
+
+  changeFirstPassword(newPassword: string): Observable<void> {
+    return this.api.post<void>('/auth/change-first-password', { new_password: newPassword });
   }
 }

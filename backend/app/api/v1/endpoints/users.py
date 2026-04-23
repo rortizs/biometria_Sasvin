@@ -124,4 +124,5 @@ async def change_user_password(
     """Cambiar la contraseña de un usuario. Requiere rol admin."""
     user = await _get_user_or_404(db, user_id)
     user.hashed_password = get_password_hash(payload.new_password)
+    user.must_change_password = False
     await db.commit()
