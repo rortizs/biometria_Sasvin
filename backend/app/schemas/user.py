@@ -14,6 +14,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    employee_id: UUID | None = None
 
     @field_validator("email")
     @classmethod
@@ -37,6 +38,8 @@ class UserPasswordChange(BaseModel):
 class UserResponse(UserBase):
     id: UUID
     is_active: bool
+    must_change_password: bool = True
+    employee_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -59,3 +62,7 @@ class TokenPayload(BaseModel):
     sub: str
     type: str
     exp: datetime
+
+
+class ChangeFirstPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=8)

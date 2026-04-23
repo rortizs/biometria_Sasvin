@@ -4,6 +4,8 @@ export interface User {
   full_name: string | null;
   role: UserRole;
   is_active: boolean;
+  must_change_password: boolean;
+  employee_id: string | null;
   created_at: string;
   updated_at: string;
 }

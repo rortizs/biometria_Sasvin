@@ -14,7 +14,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.user import Token, UserCreate, UserResponse
+from app.schemas.user import Token, UserCreate, UserResponse, ChangeFirstPasswordRequest
 
 router = APIRouter()
 
@@ -108,6 +108,8 @@ async def register(
         hashed_password=get_password_hash(user_in.password),
         full_name=user_in.full_name,
         role=user_in.role,
+        must_change_password=True,
+        employee_id=user_in.employee_id,
     )
 
     db.add(user)
@@ -182,3 +184,19 @@ async def get_current_user_info(
     desde el frontend al cargar la aplicación.
     """
     return current_user
+
+
+@router.post(
+    "/change-first-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["auth"],
+)
+async def change_first_password(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    payload: ChangeFirstPasswordRequest,
+) -> None:
+    """Self-service: change password on first login. Resets must_change_password flag."""
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    current_user.must_change_password = False
+    await db.commit()

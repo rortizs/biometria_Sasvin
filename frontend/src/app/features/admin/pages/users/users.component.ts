@@ -5,7 +5,9 @@ import { RouterLink } from '@angular/router';
 import { UserManagementService, UserCreatePayload, UserUpdatePayload } from '../../../../core/services/user-management.service';
 import { RoleService } from '../../../../core/services/role.service';
 import { AuthService } from '../../../../core/services/auth.service';
+import { EmployeeService } from '../../../../core/services/employee.service';
 import { User, UserRole } from '../../../../core/models/user.model';
+import { Employee } from '../../../../core/models/employee.model';
 import { Role, UserRoleAssignmentResponse } from '../../../../core/models/role.model';
 import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 
@@ -90,16 +92,53 @@ type ModalType = 'create' | 'edit' | 'password' | 'rbac' | null;
                 <input [(ngModel)]="createForm.email" name="email" type="email" required
                   placeholder="usuario@miumg.edu.gt" />
               </div>
+
               <div class="form-group">
                 <label>Contraseña *</label>
-                <input [(ngModel)]="createForm.password" name="password" type="password" required
-                  minlength="8" placeholder="Mínimo 8 caracteres" />
+                <div class="password-row">
+                  <input [(ngModel)]="createForm.password" name="password"
+                         [type]="showPassword() ? 'text' : 'password'" required minlength="8"
+                         placeholder="Mínimo 8 caracteres" class="password-input" />
+                  <button type="button" class="btn-icon" (click)="showPassword.set(!showPassword())" title="Mostrar/ocultar">
+                    {{ showPassword() ? '🙈' : '👁️' }}
+                  </button>
+                  <button type="button" class="btn btn-gen" (click)="generatePassword()" title="Generar contraseña segura">
+                    Generar
+                  </button>
+                </div>
+                @if (createForm.password) {
+                  <div class="pass-strength">
+                    <div class="strength-bar" [style.width]="passwordStrengthPct() + '%'" [style.background]="passwordStrengthColor()"></div>
+                  </div>
+                  <div class="pass-hint" [style.color]="passwordStrengthColor()">{{ passwordStrengthLabel() }}</div>
+                }
               </div>
+
               <div class="form-group">
-                <label>Nombre completo</label>
-                <input [(ngModel)]="createForm.full_name" name="full_name"
-                  placeholder="Ej: Juan López" />
+                <label>Empleado vinculado</label>
+                <div class="search-wrapper">
+                  <input [(ngModel)]="employeeSearch" name="employeeSearch"
+                         placeholder="Buscar empleado..." (input)="filterEmployees()"
+                         autocomplete="off" />
+                  @if (filteredEmployees().length > 0 && employeeSearch && !createForm.employee_id) {
+                    <div class="dropdown-list">
+                      @for (emp of filteredEmployees(); track emp.id) {
+                        <div class="dropdown-item" (click)="selectEmployee(emp)">
+                          <strong>{{ emp.first_name }} {{ emp.last_name }}</strong>
+                          <span class="emp-code">{{ emp.employee_code }}</span>
+                        </div>
+                      }
+                    </div>
+                  }
+                  @if (createForm.employee_id) {
+                    <div class="selected-emp">
+                      ✓ {{ createForm.full_name }}
+                      <button type="button" class="btn-clear" (click)="clearEmployee()">✕</button>
+                    </div>
+                  }
+                </div>
               </div>
+
               <div class="form-group">
                 <label>Rol *</label>
                 <select [(ngModel)]="createForm.role" name="role" required>
@@ -304,6 +343,25 @@ type ModalType = 'create' | 'edit' | 'password' | 'rbac' | null;
     .perm-count { font-size: 0.72rem; color: #9ca3af; }
     .empty-sm { padding: 1rem; text-align: center; color: #9ca3af; font-size: 0.875rem; }
 
+    /* Password generator */
+    .password-row { display: flex; gap: 0.5rem; align-items: center; }
+    .password-input { flex: 1; }
+    .btn-icon { background: none; border: 2px solid #e5e7eb; border-radius: 0.5rem; padding: 0.625rem; cursor: pointer; font-size: 1rem; }
+    .btn-gen { padding: 0.5rem 0.75rem; background: #f3f4f6; border: 2px solid #e5e7eb; border-radius: 0.5rem; cursor: pointer; font-size: 0.8rem; font-weight: 600; white-space: nowrap; color: #374151; }
+    .btn-gen:hover { background: #e5e7eb; }
+    .pass-strength { height: 4px; background: #e5e7eb; border-radius: 2px; margin-top: 0.5rem; overflow: hidden; }
+    .strength-bar { height: 100%; border-radius: 2px; transition: width 0.3s, background 0.3s; }
+    .pass-hint { font-size: 0.75rem; margin-top: 0.25rem; font-weight: 600; }
+
+    /* Employee selector */
+    .search-wrapper { position: relative; }
+    .dropdown-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 2px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 10; max-height: 200px; overflow-y: auto; }
+    .dropdown-item { padding: 0.625rem 0.875rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .dropdown-item:hover { background: #f9fafb; }
+    .emp-code { font-size: 0.75rem; color: #9ca3af; }
+    .selected-emp { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: #d1fae5; border-radius: 0.5rem; font-size: 0.875rem; color: #065f46; margin-top: 0.25rem; font-weight: 500; }
+    .btn-clear { background: none; border: none; cursor: pointer; font-size: 1rem; padding: 0; color: #6b7280; }
+
     @media (max-width: 768px) {
       .page { padding: 1rem; }
       .header { flex-direction: column; align-items: flex-start; }
@@ -316,6 +374,7 @@ export class UsersComponent implements OnInit {
   private readonly userService = inject(UserManagementService);
   private readonly roleService = inject(RoleService);
   private readonly authService = inject(AuthService);
+  private readonly employeeService = inject(EmployeeService);
 
   readonly users = signal<User[]>([]);
   readonly loading = signal(false);
@@ -329,6 +388,14 @@ export class UsersComponent implements OnInit {
   readonly selectedRoleIds = signal<Set<string>>(new Set());
   readonly loadingRbac = signal(false);
 
+  // Employee selector state
+  readonly employees = signal<Employee[]>([]);
+  readonly filteredEmployees = signal<Employee[]>([]);
+  employeeSearch = '';
+
+  // Password visibility
+  readonly showPassword = signal(false);
+
   readonly currentUserId = computed(() => this.authService.user()?.id ?? null);
 
   readonly roleOptions: { value: UserRole; label: string }[] = [
@@ -339,11 +406,12 @@ export class UsersComponent implements OnInit {
     { value: 'catedratico', label: 'Catedrático' },
   ];
 
-  createForm: { email: string; password: string; full_name: string; role: UserRole } = {
+  createForm: { email: string; password: string; full_name: string; role: UserRole; employee_id: string | null } = {
     email: '',
     password: '',
     full_name: '',
     role: 'catedratico',
+    employee_id: null,
   };
 
   editForm: { email: string; full_name: string; role: UserRole; is_active: boolean } = {
@@ -372,14 +440,92 @@ export class UsersComponent implements OnInit {
     this.selectedUser.set(null);
     this.formError.set(null);
     this.passwordForm = { new_password: '' };
+    this.showPassword.set(false);
   }
 
   // --- Create ---
 
   openCreateModal(): void {
-    this.createForm = { email: '', password: '', full_name: '', role: 'catedratico' };
+    this.createForm = { email: '', password: '', full_name: '', role: 'catedratico', employee_id: null };
+    this.employeeSearch = '';
+    this.filteredEmployees.set([]);
     this.formError.set(null);
+    this.showPassword.set(false);
     this.activeModal.set('create');
+    // Load employees for selector
+    if (this.employees().length === 0) {
+      this.employeeService.getAll().subscribe({
+        next: (emps) => this.employees.set(emps.filter(e => e.is_active)),
+        error: () => {},
+      });
+    }
+  }
+
+  generatePassword(): void {
+    const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+    const lower = 'abcdefghjkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const special = '!@#$%&*';
+    const all = upper + lower + digits + special;
+    let pwd = upper[Math.floor(Math.random() * upper.length)]
+      + lower[Math.floor(Math.random() * lower.length)]
+      + digits[Math.floor(Math.random() * digits.length)]
+      + special[Math.floor(Math.random() * special.length)];
+    for (let i = 4; i < 12; i++) pwd += all[Math.floor(Math.random() * all.length)];
+    this.createForm.password = pwd.split('').sort(() => Math.random() - 0.5).join('');
+    this.showPassword.set(true);
+  }
+
+  passwordStrengthPct(): number {
+    const p = this.createForm.password;
+    if (!p) return 0;
+    let score = 0;
+    if (p.length >= 8) score++;
+    if (p.length >= 12) score++;
+    if (/[A-Z]/.test(p)) score++;
+    if (/[a-z]/.test(p)) score++;
+    if (/[0-9]/.test(p)) score++;
+    if (/[^A-Za-z0-9]/.test(p)) score++;
+    return Math.min(100, Math.round((score / 6) * 100));
+  }
+
+  passwordStrengthColor(): string {
+    const pct = this.passwordStrengthPct();
+    if (pct < 40) return '#ef4444';
+    if (pct < 70) return '#f59e0b';
+    return '#22c55e';
+  }
+
+  passwordStrengthLabel(): string {
+    const pct = this.passwordStrengthPct();
+    if (pct < 40) return 'Débil';
+    if (pct < 70) return 'Media';
+    return 'Fuerte';
+  }
+
+  filterEmployees(): void {
+    const q = this.employeeSearch.toLowerCase().trim();
+    if (!q) { this.filteredEmployees.set([]); return; }
+    this.filteredEmployees.set(
+      this.employees().filter(e =>
+        `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
+        e.employee_code.toLowerCase().includes(q)
+      ).slice(0, 8)
+    );
+  }
+
+  selectEmployee(emp: Employee): void {
+    this.createForm.full_name = `${emp.first_name} ${emp.last_name}`;
+    this.createForm.employee_id = emp.id;
+    this.employeeSearch = `${emp.first_name} ${emp.last_name}`;
+    this.filteredEmployees.set([]);
+  }
+
+  clearEmployee(): void {
+    this.createForm.employee_id = null;
+    this.createForm.full_name = '';
+    this.employeeSearch = '';
+    this.filteredEmployees.set([]);
   }
 
   saveCreate(): void {
@@ -392,6 +538,7 @@ export class UsersComponent implements OnInit {
       password: this.createForm.password,
       full_name: this.createForm.full_name || null,
       role: this.createForm.role,
+      employee_id: this.createForm.employee_id,
     };
 
     this.userService.createUser(payload).subscribe({

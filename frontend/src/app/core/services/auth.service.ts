@@ -26,6 +26,7 @@ export class AuthService {
   readonly isAuthenticated = computed(() => !!this.currentUser());
   readonly isAdmin = computed(() => this.currentUser()?.role === 'admin');
   readonly isCoordinadorOrAbove = computed(() => ['admin', 'director', 'coordinador'].includes(this.currentUser()?.role ?? ''));
+  readonly mustChangePassword = computed(() => this.currentUser()?.must_change_password ?? false);
 
   constructor() {
     this.loadCurrentUser();
@@ -83,6 +84,12 @@ export class AuthService {
           return throwError(() => error);
         })
       );
+  }
+
+  changeFirstPassword(newPassword: string): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/auth/change-first-password`, { new_password: newPassword }).pipe(
+      tap(() => this.currentUser.update(u => u ? { ...u, must_change_password: false } : null))
+    );
   }
 
   private loadCurrentUser(): void {
