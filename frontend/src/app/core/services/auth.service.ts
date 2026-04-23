@@ -45,7 +45,6 @@ export class AuthService {
         tap((response) => {
           this.setTokens(response);
           this.loadCurrentUser();
-          this.wsNotif.connect(response.access_token, () => this.getAccessToken());
         }),
         catchError((error) => {
           this.isLoading.set(false);

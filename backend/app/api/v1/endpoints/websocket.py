@@ -16,12 +16,9 @@ async def websocket_notifications(
     Client connects with: ws://host/api/v1/ws/notifications?token=<JWT>
     """
     payload = decode_token(token)
-    if payload is None or payload.get("type") != "access":
-        await websocket.close(code=4001)
-        return
-
-    user_id = payload.get("sub")
-    if not user_id:
+    user_id = payload.get("sub") if payload else None
+    if not payload or payload.get("type") != "access" or not user_id:
+        await websocket.accept()
         await websocket.close(code=4001)
         return
 
