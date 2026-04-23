@@ -55,7 +55,7 @@ async def get_current_user(
 async def get_current_active_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    if current_user.role not in ["admin", "supervisor"]:
+    if current_user.role != UserRole.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions",

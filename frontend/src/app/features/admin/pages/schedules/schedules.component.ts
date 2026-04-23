@@ -32,7 +32,7 @@ interface WeekDay {
 @Component({
   selector: 'app-schedules',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, NotificationBellComponent],
   template: `
     <div class="schedules-page">
       <!-- Header -->

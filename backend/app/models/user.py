@@ -4,16 +4,16 @@ from datetime import datetime
 
 from sqlalchemy import String, Boolean, DateTime, Enum
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 
 class UserRole(str, enum.Enum):
-    admin       = "admin"
-    director    = "director"
+    admin = "admin"
+    director = "director"
     coordinador = "coordinador"
-    secretaria  = "secretaria"
+    secretaria = "secretaria"
     catedratico = "catedratico"
 
 
@@ -23,7 +23,9 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    email: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
+    )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=True)
     role: Mapped[UserRole] = mapped_column(
@@ -33,4 +35,12 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Relationships (RBAC many-to-many via UserRoleAssignment)
+    user_roles: Mapped[list["UserRoleAssignment"]] = relationship(
+        "UserRoleAssignment",
+        foreign_keys="[UserRoleAssignment.user_id]",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
