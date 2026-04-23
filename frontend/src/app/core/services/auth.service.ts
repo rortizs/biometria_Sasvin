@@ -45,7 +45,7 @@ export class AuthService {
         tap((response) => {
           this.setTokens(response);
           this.loadCurrentUser();
-          this.wsNotif.connect(response.access_token);
+          this.wsNotif.connect(response.access_token, () => this.getAccessToken());
         }),
         catchError((error) => {
           this.isLoading.set(false);
@@ -98,7 +98,7 @@ export class AuthService {
         this.currentUser.set(user);
         this.isLoading.set(false);
         // Reconnect WebSocket when user is loaded from stored token
-        this.wsNotif.connect(token);
+        this.wsNotif.connect(token, () => this.getAccessToken());
       },
       error: () => {
         this.clearTokens();

@@ -13,13 +13,15 @@ export class WebSocketNotificationService {
   private retryCount = 0;
   private readonly maxRetryDelay = 30_000;
   private currentToken: string | null = null;
+  private tokenProvider: (() => string | null) | null = null;
   private intentionalDisconnect = false;
 
   readonly notifications$: Observable<Notification> = this.notificationsSubject.asObservable();
 
-  connect(token: string): void {
+  connect(token: string, tokenProvider?: () => string | null): void {
     this.intentionalDisconnect = false;
     this.currentToken = token;
+    this.tokenProvider = tokenProvider ?? null;
     this.retryCount = 0;
     this.openSocket(token);
   }
@@ -81,8 +83,11 @@ export class WebSocketNotificationService {
     const delay = Math.min(Math.pow(2, this.retryCount) * 1_000, this.maxRetryDelay);
     this.retryCount++;
     this.reconnectTimer = setTimeout(() => {
-      if (this.currentToken && !this.intentionalDisconnect) {
-        this.openSocket(this.currentToken);
+      if (this.intentionalDisconnect) return;
+      const freshToken = this.tokenProvider?.() ?? this.currentToken;
+      if (freshToken) {
+        this.currentToken = freshToken;
+        this.openSocket(freshToken);
       }
     }, delay);
   }
