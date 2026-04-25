@@ -164,6 +164,7 @@ import { AuthService } from '../../../../core/services/auth.service';
 export class LoginComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly user$ = toObservable(this.authService.user);
 
   email = '';
   password = '';
@@ -179,13 +180,11 @@ export class LoginComponent {
     this.isLoading.set(true);
     this.error.set(null);
 
-    const user$ = toObservable(this.authService.user);
-
     this.authService
       .login({ username: this.email, password: this.password })
       .subscribe({
         next: () => {
-          user$.pipe(filter(u => u !== null), take(1)).subscribe(u => {
+          this.user$.pipe(filter(u => u !== null), take(1)).subscribe(u => {
             const adminRoles = ['admin', 'director', 'coordinador', 'secretaria'];
             const destination = u && adminRoles.includes(u.role) ? '/admin/dashboard' : '/requests';
             this.router.navigate([destination]);
