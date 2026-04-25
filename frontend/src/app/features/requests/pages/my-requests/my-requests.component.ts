@@ -1,7 +1,6 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { PermissionRequestService } from '../../../../core/services/permission-request.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { AuthService } from '../../../../core/services/auth.service';
@@ -14,28 +13,26 @@ import {
 import { Employee } from '../../../../core/models/employee.model';
 import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/schedule.model';
 
+const ADMIN_ROLES = ['admin', 'director', 'coordinador', 'secretaria'];
+
 @Component({
   selector: 'app-my-requests',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="page">
       <header class="header">
-        <div>
-          <a routerLink="/admin/dashboard" class="back-link">← Dashboard</a>
-          <h1>Mis Solicitudes de Permiso</h1>
+        <h1>Mis Solicitudes de Permiso</h1>
+        <div class="header-actions">
+          <button class="btn btn-primary" (click)="openModal()">+ Nueva Solicitud</button>
+          <button class="btn btn-outline" (click)="logout()">Cerrar Sesión</button>
         </div>
-        <button class="btn btn-primary" (click)="openModal()">
-          + Nueva Solicitud
-        </button>
       </header>
 
-      <!-- Loading -->
       @if (loading()) {
         <div class="loading">Cargando solicitudes...</div>
       }
 
-      <!-- Empty state -->
       @if (!loading() && requests().length === 0) {
         <div class="empty-card">
           <div class="empty-icon">📋</div>
@@ -44,7 +41,6 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
         </div>
       }
 
-      <!-- Request cards -->
       <div class="cards-grid">
         @for (req of requests(); track req.id) {
           <div class="request-card">
@@ -78,7 +74,6 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
         }
       </div>
 
-      <!-- Modal -->
       @if (showModal()) {
         <div class="modal-overlay" (click)="closeModal()">
           <div class="modal" (click)="$event.stopPropagation()">
@@ -87,14 +82,21 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
               <button class="close-btn" (click)="closeModal()">✕</button>
             </div>
             <form (ngSubmit)="submitRequest()">
+
+              <!-- Employee: readonly for non-admin, dropdown for admin -->
               <div class="form-group">
                 <label>Empleado</label>
-                <select [(ngModel)]="form.employee_id" name="employee_id" required>
-                  <option value="">Seleccioná un empleado</option>
-                  @for (emp of employees(); track emp.id) {
-                    <option [value]="emp.id">{{ emp.first_name }} {{ emp.last_name }}</option>
-                  }
-                </select>
+                @if (isAdminRole()) {
+                  <select [(ngModel)]="form.employee_id" name="employee_id" required>
+                    <option value="">Seleccioná un empleado</option>
+                    @for (emp of employees(); track emp.id) {
+                      <option [value]="emp.id">{{ emp.first_name }} {{ emp.last_name }}</option>
+                    }
+                  </select>
+                } @else {
+                  <input type="text" [value]="currentEmployeeName()" readonly class="readonly-input" />
+                  <input type="hidden" [(ngModel)]="form.employee_id" name="employee_id" />
+                }
               </div>
 
               <div class="form-group">
@@ -116,7 +118,7 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
                     name="start_date"
                     [min]="minDate()"
                     required
-                    (change)="validateDates()"
+                    (change)="onDateChange()"
                   />
                   @if (dateError()) {
                     <span class="field-error">{{ dateError() }}</span>
@@ -130,9 +132,42 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
                     name="end_date"
                     [min]="form.start_date || minDate()"
                     required
+                    (change)="onDateChange()"
                   />
                 </div>
               </div>
+
+              <!-- Time fields — only when same day -->
+              @if (sameDay()) {
+                <div class="same-day-notice">
+                  📅 Misma fecha — indicá el rango horario de ausencia
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Hora Inicio</label>
+                    <input
+                      type="time"
+                      [(ngModel)]="form.start_time"
+                      name="start_time"
+                      required
+                      (change)="onTimeChange()"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>Hora Fin</label>
+                    <input
+                      type="time"
+                      [(ngModel)]="form.end_time"
+                      name="end_time"
+                      required
+                      (change)="onTimeChange()"
+                    />
+                  </div>
+                </div>
+                @if (timeError()) {
+                  <span class="field-error">{{ timeError() }}</span>
+                }
+              }
 
               <div class="form-group">
                 <label>Descripción / Motivo</label>
@@ -172,26 +207,23 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
     .header {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       margin-bottom: 2rem;
       flex-wrap: wrap;
       gap: 1rem;
     }
 
-    .back-link {
-      display: inline-block;
-      color: #6b7280;
-      text-decoration: none;
-      font-size: 0.875rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .back-link:hover { color: #3b82f6; }
-
     h1 {
       font-size: 1.8rem;
       color: #1f2937;
       margin: 0;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
     }
 
     .loading {
@@ -211,10 +243,7 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
     .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
     .empty-card p { color: #6b7280; margin-bottom: 1.5rem; }
 
-    .cards-grid {
-      display: grid;
-      gap: 1rem;
-    }
+    .cards-grid { display: grid; gap: 1rem; }
 
     .request-card {
       background: white;
@@ -252,10 +281,7 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
       font-weight: 600;
     }
 
-    .card-dates {
-      color: #6b7280;
-      font-size: 0.875rem;
-    }
+    .card-dates { color: #6b7280; font-size: 0.875rem; }
 
     .card-description {
       color: #4b5563;
@@ -278,12 +304,8 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
       padding-top: 0.75rem;
     }
 
-    .card-date {
-      color: #9ca3af;
-      font-size: 0.75rem;
-    }
+    .card-date { color: #9ca3af; font-size: 0.75rem; }
 
-    /* Buttons */
     .btn {
       padding: 0.625rem 1.25rem;
       border-radius: 0.5rem;
@@ -294,11 +316,7 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
       font-size: 0.9rem;
     }
 
-    .btn-primary {
-      background: #3b82f6;
-      color: white;
-    }
-
+    .btn-primary { background: #3b82f6; color: white; }
     .btn-primary:hover:not(:disabled) { background: #2563eb; }
     .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
@@ -310,7 +328,6 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
 
     .btn-outline:hover { border-color: #9ca3af; }
 
-    /* Modal */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -340,10 +357,7 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
       margin-bottom: 1rem;
     }
 
-    .modal-header h2 {
-      font-size: 1.25rem;
-      color: #1f2937;
-    }
+    .modal-header h2 { font-size: 1.25rem; color: #1f2937; }
 
     .close-btn {
       background: none;
@@ -356,13 +370,9 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
 
     .close-btn:hover { color: #374151; }
 
-    form {
-      padding: 0 1.5rem 1.5rem;
-    }
+    form { padding: 0 1.5rem 1.5rem; }
 
-    .form-group {
-      margin-bottom: 1rem;
-    }
+    .form-group { margin-bottom: 1rem; }
 
     .form-row {
       display: grid;
@@ -395,7 +405,22 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
       border-color: #3b82f6;
     }
 
+    .readonly-input {
+      background: #f9fafb;
+      color: #6b7280;
+      cursor: not-allowed;
+    }
+
     textarea { resize: vertical; }
+
+    .same-day-notice {
+      background: #eff6ff;
+      color: #1d4ed8;
+      padding: 0.625rem 0.875rem;
+      border-radius: 0.5rem;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
 
     .field-error {
       color: #ef4444;
@@ -431,13 +456,15 @@ import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/sc
       .form-row { grid-template-columns: 1fr; }
       .modal-actions { flex-direction: column-reverse; }
       .modal-actions .btn { width: 100%; text-align: center; }
+      .header-actions { width: 100%; }
+      .header-actions .btn { flex: 1; text-align: center; }
     }
   `],
 })
 export class MyRequestsComponent implements OnInit {
   private readonly requestService = inject(PermissionRequestService);
   private readonly employeeService = inject(EmployeeService);
-  readonly authService = inject(AuthService);
+  private readonly authService = inject(AuthService);
 
   readonly requests = signal<PermissionRequest[]>([]);
   readonly employees = signal<Employee[]>([]);
@@ -446,12 +473,28 @@ export class MyRequestsComponent implements OnInit {
   readonly submitting = signal(false);
   readonly submitError = signal<string | null>(null);
   readonly dateError = signal<string | null>(null);
+  readonly timeError = signal<string | null>(null);
+  readonly sameDay = signal(false);
+
+  readonly isAdminRole = computed(() => {
+    const role = this.authService.user()?.role ?? '';
+    return ADMIN_ROLES.includes(role);
+  });
+
+  readonly currentEmployeeName = computed(() => {
+    const user = this.authService.user();
+    if (!user?.employee_id) return user?.full_name ?? user?.email ?? '';
+    const emp = this.employees().find(e => e.id === user.employee_id);
+    return emp ? `${emp.first_name} ${emp.last_name}` : (user.full_name ?? user.email ?? '');
+  });
 
   form: PermissionRequestCreate = {
     employee_id: '',
     exception_type: '',
     start_date: '',
     end_date: '',
+    start_time: '',
+    end_time: '',
     description: '',
   };
 
@@ -473,16 +516,14 @@ export class MyRequestsComponent implements OnInit {
 
   loadRequests(): void {
     this.loading.set(true);
-    const user = this.authService.user();
-    this.requestService
-      .getAll(user ? { employee_id: undefined } : undefined)
-      .subscribe({
-        next: (list) => {
-          this.requests.set(list);
-          this.loading.set(false);
-        },
-        error: () => this.loading.set(false),
-      });
+    // Backend filters by JWT role — no params needed
+    this.requestService.getAll().subscribe({
+      next: (list) => {
+        this.requests.set(list);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
   }
 
   loadEmployees(): void {
@@ -494,6 +535,10 @@ export class MyRequestsComponent implements OnInit {
 
   openModal(): void {
     this.resetForm();
+    const user = this.authService.user();
+    if (user && !this.isAdminRole()) {
+      this.form.employee_id = user.employee_id ?? '';
+    }
     this.showModal.set(true);
   }
 
@@ -502,27 +547,51 @@ export class MyRequestsComponent implements OnInit {
     this.resetForm();
   }
 
-  validateDates(): void {
-    if (!this.form.start_date) {
-      this.dateError.set(null);
-      return;
+  onDateChange(): void {
+    const isSame = !!this.form.start_date &&
+      !!this.form.end_date &&
+      this.form.start_date === this.form.end_date;
+    this.sameDay.set(isSame);
+
+    if (!isSame) {
+      this.form.start_time = '';
+      this.form.end_time = '';
+      this.timeError.set(null);
     }
-    const start = new Date(this.form.start_date);
-    const minAllowed = new Date(this.minDate());
-    if (start < minAllowed) {
-      this.dateError.set('La fecha de inicio debe ser al menos 7 días desde hoy.');
-    } else {
-      this.dateError.set(null);
+
+    if (this.form.start_date) {
+      const start = new Date(this.form.start_date);
+      const minAllowed = new Date(this.minDate());
+      this.dateError.set(
+        start < minAllowed ? 'La fecha de inicio debe ser al menos 7 días desde hoy.' : null
+      );
+    }
+  }
+
+  onTimeChange(): void {
+    if (this.form.start_time && this.form.end_time) {
+      this.timeError.set(
+        this.form.start_time >= this.form.end_time
+          ? 'La hora fin debe ser posterior a la hora inicio.'
+          : null
+      );
     }
   }
 
   submitRequest(): void {
-    this.validateDates();
     if (this.dateError()) return;
 
     if (!this.form.employee_id || !this.form.exception_type || !this.form.start_date || !this.form.end_date) {
       this.submitError.set('Completá todos los campos requeridos.');
       return;
+    }
+
+    if (this.sameDay()) {
+      if (!this.form.start_time || !this.form.end_time) {
+        this.submitError.set('Para solicitudes del mismo día, indicá hora inicio y hora fin.');
+        return;
+      }
+      if (this.timeError()) return;
     }
 
     this.submitting.set(true);
@@ -534,9 +603,13 @@ export class MyRequestsComponent implements OnInit {
       start_date: this.form.start_date,
       end_date: this.form.end_date,
     };
-    if (this.form.description) {
-      payload.description = this.form.description;
+
+    if (this.sameDay()) {
+      payload.start_time = this.form.start_time;
+      payload.end_time = this.form.end_time;
     }
+
+    if (this.form.description) payload.description = this.form.description;
 
     this.requestService.create(payload).subscribe({
       next: () => {
@@ -551,6 +624,10 @@ export class MyRequestsComponent implements OnInit {
     });
   }
 
+  logout(): void {
+    this.authService.logout();
+  }
+
   getExceptionLabel(type: string): string {
     return EXCEPTION_TYPE_LABELS[type as ExceptionType] ?? type;
   }
@@ -560,8 +637,7 @@ export class MyRequestsComponent implements OnInit {
   }
 
   getStatusColor(status: string): string {
-    const color = STATUS_COLORS[status as keyof typeof STATUS_COLORS] ?? '#6b7280';
-    return color;
+    return STATUS_COLORS[status as keyof typeof STATUS_COLORS] ?? '#6b7280';
   }
 
   getStatusBg(status: string): string {
@@ -580,9 +656,13 @@ export class MyRequestsComponent implements OnInit {
       exception_type: '',
       start_date: '',
       end_date: '',
+      start_time: '',
+      end_time: '',
       description: '',
     };
     this.submitError.set(null);
     this.dateError.set(null);
+    this.timeError.set(null);
+    this.sameDay.set(false);
   }
 }
