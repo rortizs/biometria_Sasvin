@@ -1,17 +1,20 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn } from '@angular/router';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { filter, map, take } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+
+const ADMIN_ROLES = ['admin', 'director', 'coordinador', 'secretaria'] as const;
+
+function hasAdminRole(role: string): boolean {
+  return (ADMIN_ROLES as readonly string[]).includes(role);
+}
 
 export const authGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  // Check token directly instead of waiting for user to load
-  const token = authService.getAccessToken();
-  if (token) {
-    return true;
-  }
-
+  if (authService.getAccessToken()) return true;
   router.navigate(['/auth/login']);
   return false;
 };
@@ -20,26 +23,38 @@ export const adminGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  // For now, if user has token, allow access
-  // Role check happens after user loads
-  const token = authService.getAccessToken();
-  if (token) {
-    return true;
+  if (!authService.getAccessToken()) {
+    router.navigate(['/auth/login']);
+    return false;
   }
 
-  router.navigate(['/']);
-  return false;
+  const user = authService.user();
+  if (user !== null) {
+    if (hasAdminRole(user.role)) return true;
+    router.navigate(['/requests']);
+    return false;
+  }
+
+  // User signal still loading (async /auth/me) — wait for it
+  return toObservable(authService.user).pipe(
+    filter(u => u !== null),
+    take(1),
+    map(u => {
+      if (u && hasAdminRole(u.role)) return true;
+      router.navigate(['/requests']);
+      return false;
+    })
+  );
 };
 
 export const guestGuard: CanActivateFn = () => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  const token = authService.getAccessToken();
-  if (!token) {
-    return true;
-  }
+  if (!authService.getAccessToken()) return true;
 
-  router.navigate(['/admin/dashboard']);
+  const user = authService.user();
+  const destination = user && !hasAdminRole(user.role) ? '/requests' : '/admin/dashboard';
+  router.navigate([destination]);
   return false;
 };

@@ -2,6 +2,8 @@ import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { filter, take } from 'rxjs';
 import { AuthService } from '../../../../core/services/auth.service';
 
 @Component({
@@ -177,11 +179,17 @@ export class LoginComponent {
     this.isLoading.set(true);
     this.error.set(null);
 
+    const user$ = toObservable(this.authService.user);
+
     this.authService
       .login({ username: this.email, password: this.password })
       .subscribe({
         next: () => {
-          this.router.navigate(['/admin/dashboard']);
+          user$.pipe(filter(u => u !== null), take(1)).subscribe(u => {
+            const adminRoles = ['admin', 'director', 'coordinador', 'secretaria'];
+            const destination = u && adminRoles.includes(u.role) ? '/admin/dashboard' : '/requests';
+            this.router.navigate([destination]);
+          });
         },
         error: (err) => {
           this.isLoading.set(false);
