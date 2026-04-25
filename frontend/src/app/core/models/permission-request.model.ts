@@ -34,6 +34,8 @@ export interface PermissionRequestCreate {
   exception_type: string;
   start_date: string;
   end_date: string;
+  start_time?: string;
+  end_time?: string;
   description?: string;
 }
 
