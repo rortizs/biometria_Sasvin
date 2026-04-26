@@ -17,9 +17,13 @@ import { filter } from 'rxjs/operators';
 import { CameraService } from '../../core/services/camera.service';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { GeolocationService } from '../../core/services/geolocation.service';
+import { LocationService } from '../../core/services/location.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { GeoPosition } from '../../core/models/geolocation.model';
+import { Location as AppLocation } from '../../core/models/location.model';
 import { AttendanceRecord } from '../../core/models/attendance.model';
+
+const KIOSK_LOCATION_KEY = 'kiosk_location_id';
 
 type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
 type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -49,17 +53,19 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
         </div>
         <div class="header-center">
           <h1 class="title">Control de Asistencia</h1>
-          <div class="geo-status" [class]="geoStatus()">
+          <button class="geo-status" [class]="geoStatus()" (click)="showLocationPicker.set(true)" title="Configurar sede del kiosk">
             @if (geoStatus() === 'loading') {
               <span class="geo-icon">📍</span> Obteniendo ubicación...
+            } @else if (geoStatus() === 'success' && kioskLocation()) {
+              <span class="geo-icon">✓</span> {{ kioskLocation()!.name }}
             } @else if (geoStatus() === 'success') {
               <span class="geo-icon">✓</span> Ubicación verificada
             } @else if (geoStatus() === 'error') {
-              <span class="geo-icon">⚠</span> {{ geoError() }}
+              <span class="geo-icon">⚠</span> Configurar sede →
             } @else {
-              <span class="geo-icon">📍</span> Esperando ubicación
+              <span class="geo-icon">📍</span> Configurar sede →
             }
-          </div>
+          </button>
         </div>
       </header>
 
@@ -148,6 +154,40 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
         </div>
       </main>
 
+      <!-- Location Picker Modal -->
+      @if (showLocationPicker()) {
+        <div class="location-modal-backdrop" (click)="showLocationPicker.set(false)">
+          <div class="location-modal" (click)="$event.stopPropagation()">
+            <h3 class="location-modal-title">Sede del Kiosk</h3>
+            <p class="location-modal-subtitle">Seleccioná la sede donde está instalado este kiosk</p>
+            <div class="location-list">
+              @for (loc of availableLocations(); track loc.id) {
+                <button
+                  class="location-item"
+                  [class.selected]="kioskLocation()?.id === loc.id"
+                  (click)="selectLocation(loc)"
+                >
+                  <span class="location-name">{{ loc.name }}</span>
+                  @if (loc.address) {
+                    <span class="location-address">{{ loc.address }}</span>
+                  }
+                  @if (kioskLocation()?.id === loc.id) {
+                    <span class="location-check">✓</span>
+                  }
+                </button>
+              }
+              @if (availableLocations().length === 0) {
+                <p class="location-empty">No hay sedes configuradas.</p>
+              }
+            </div>
+            @if (kioskLocation()) {
+              <button class="location-clear-btn" (click)="clearLocation()">Quitar sede asignada</button>
+            }
+            <button class="location-close-btn" (click)="showLocationPicker.set(false)">Cerrar</button>
+          </div>
+        </div>
+      }
+
       <!-- Footer -->
       <footer class="kiosk-footer">
         <a routerLink="/admin/dashboard" class="admin-link">Administración</a>
@@ -218,6 +258,14 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity 0.2s;
+    }
+
+    .geo-status:hover {
+      opacity: 0.8;
     }
 
     .geo-status.loading {
@@ -624,6 +672,132 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
         display: none !important;
       }
     }
+
+    /* Location Picker Modal */
+    .location-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      backdrop-filter: blur(4px);
+    }
+
+    .location-modal {
+      background: #1e2a3a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 1rem;
+      padding: 2rem;
+      width: 90%;
+      max-width: 480px;
+      max-height: 80vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .location-modal-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: white;
+      margin: 0;
+    }
+
+    .location-modal-subtitle {
+      font-size: 0.875rem;
+      color: rgba(255, 255, 255, 0.6);
+      margin: 0;
+    }
+
+    .location-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .location-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 0.5rem;
+      color: white;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .location-item:hover {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: rgba(59, 130, 246, 0.4);
+    }
+
+    .location-item.selected {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: rgba(34, 197, 94, 0.4);
+    }
+
+    .location-name {
+      font-weight: 600;
+      font-size: 1rem;
+      flex: 1;
+    }
+
+    .location-address {
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .location-check {
+      color: #4ade80;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+
+    .location-empty {
+      color: rgba(255, 255, 255, 0.5);
+      text-align: center;
+      padding: 1rem;
+      margin: 0;
+    }
+
+    .location-clear-btn {
+      padding: 0.625rem 1rem;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 0.5rem;
+      color: #fca5a5;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .location-clear-btn:hover {
+      background: rgba(239, 68, 68, 0.35);
+    }
+
+    .location-close-btn {
+      padding: 0.75rem;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 0.5rem;
+      color: white;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: background 0.2s;
+    }
+
+    .location-close-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
   `],
 })
 export class KioskComponent implements OnInit, OnDestroy {
@@ -632,6 +806,7 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly cameraService = inject(CameraService);
   private readonly attendanceService = inject(AttendanceService);
   private readonly geolocationService = inject(GeolocationService);
+  private readonly locationService = inject(LocationService);
   private readonly platformService = inject(PlatformService);
   private readonly swUpdate = inject(SwUpdate);
 
@@ -655,6 +830,10 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly geoError = signal<string>('');
   private currentPosition: GeoPosition | null = null;
 
+  readonly kioskLocation = signal<AppLocation | null>(null);
+  readonly availableLocations = signal<AppLocation[]>([]);
+  readonly showLocationPicker = signal(false);
+
   // Orientation handling for tablets: portrait orientation signal
   private readonly isPortrait = signal(false);
   
@@ -670,30 +849,86 @@ export class KioskComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.startClock();
+    this.loadKioskLocation();
+    this.loadLocations();
     this.requestGeolocation();
     this.setupOrientationListener();
     this.setupPWAInstallPrompt();
   }
 
+  private loadKioskLocation(): void {
+    const savedId = localStorage.getItem(KIOSK_LOCATION_KEY);
+    if (!savedId) return;
+
+    this.locationService.getLocation(savedId).subscribe({
+      next: (location) => {
+        this.kioskLocation.set(location);
+        if (this.currentPosition === null) {
+          this.applyKioskLocationAsPosition(location);
+        }
+      },
+      error: () => {
+        localStorage.removeItem(KIOSK_LOCATION_KEY);
+      },
+    });
+  }
+
+  private loadLocations(): void {
+    this.locationService.getLocations().subscribe({
+      next: (locations) => this.availableLocations.set(locations),
+      error: () => {},
+    });
+  }
+
   private requestGeolocation(): void {
     if (!this.geolocationService.isSupported()) {
-      this.geoError.set('Geolocalización no soportada');
-      this.geoStatus.set('error');
+      this.fallbackToKioskLocation();
       return;
     }
 
     this.geoStatus.set('loading');
     this.geolocationService.getCurrentPosition().subscribe({
       next: (position) => {
-        if (position) {
-          this.currentPosition = position;
-          this.geoStatus.set('success');
-        } else {
-          this.geoError.set('No se pudo obtener la ubicación');
-          this.geoStatus.set('error');
-        }
+        this.currentPosition = position;
+        this.geoStatus.set('success');
+      },
+      error: () => {
+        this.fallbackToKioskLocation();
       },
     });
+  }
+
+  private fallbackToKioskLocation(): void {
+    const loc = this.kioskLocation();
+    if (loc) {
+      this.applyKioskLocationAsPosition(loc);
+    } else {
+      this.geoStatus.set('error');
+    }
+  }
+
+  private applyKioskLocationAsPosition(location: AppLocation): void {
+    this.currentPosition = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: 0,
+    };
+    this.geoStatus.set('success');
+  }
+
+  selectLocation(location: AppLocation): void {
+    localStorage.setItem(KIOSK_LOCATION_KEY, location.id);
+    this.kioskLocation.set(location);
+    this.applyKioskLocationAsPosition(location);
+    this.showLocationPicker.set(false);
+  }
+
+  clearLocation(): void {
+    localStorage.removeItem(KIOSK_LOCATION_KEY);
+    this.kioskLocation.set(null);
+    this.currentPosition = null;
+    this.geoStatus.set('idle');
+    this.showLocationPicker.set(false);
   }
 
   ngAfterViewInit(): void {
