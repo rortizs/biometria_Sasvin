@@ -109,9 +109,11 @@ Enviar entre 1 y 5 fotos por request. Se recomienda 3 fotos con 250ms de diferen
 
 ## Geolocalización
 
-Las coordenadas GPS son **opcionales**. Si se envían, el backend calcula la distancia
-a la sede asignada del empleado usando la fórmula de Haversine.
-El resultado se guarda en `geo_validated` pero **no bloquea** el registro de asistencia.
+Las coordenadas GPS son **obligatorias** para `POST /attendance/check-in` y
+`POST /attendance/check-out`. El backend calcula la distancia a la sede asignada
+del empleado usando la fórmula de Haversine.
+
+Si el dispositivo está fuera del radio autorizado, el backend **rechaza** el marcaje.
 """,
     version="1.0.0",
     contact={

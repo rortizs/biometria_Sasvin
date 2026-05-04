@@ -146,6 +146,23 @@ async def register_face(
                 detail="No valid face found in any of the provided images",
             )
 
+        # Require at least 2 successful embeddings for enrollment
+        if len(embeddings) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least 2 valid face images are required for registration",
+            )
+
+        # Liveness check on enrollment: embeddings must show variance
+        # (protects against registering a static photo)
+        if len(embeddings) >= 2:
+            is_live, variance = face_service.check_liveness_from_embeddings(embeddings)
+            if not is_live:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Liveness check failed: all images appear to be from the same static source. Capture photos with natural head movement.",
+                )
+
         existing = await db.execute(
             select(FaceEmbedding).where(
                 FaceEmbedding.employee_id == request.employee_id
@@ -216,7 +233,9 @@ async def register_face(
     response_model=FaceVerifyResponse,
     tags=["faces"],
     responses={
-        200: {"description": "Verificación completada — `success: true` si hay match, `false` si no"},
+        200: {
+            "description": "Verificación completada — `success: true` si hay match, `false` si no"
+        },
     },
 )
 async def verify_face(

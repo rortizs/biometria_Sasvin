@@ -521,7 +521,7 @@ export class AttendanceScanComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         console.warn('GPS acquisition failed:', error);
-        // Don't block scan - backend validates location
+        // Scan is blocked until real GPS is available
       },
     });
   }
@@ -531,7 +531,8 @@ export class AttendanceScanComponent implements OnInit, OnDestroy {
       this.cameraService.active() &&
       !this.cameraService.capturing() &&
       this.mode() === 'idle' &&
-      !this.cameraError()
+      !this.cameraError() &&
+      !!this.lastGeoPosition()
     );
   }
 
@@ -552,12 +553,19 @@ export class AttendanceScanComponent implements OnInit, OnDestroy {
       // Get GPS position if available
       const geoPos = this.lastGeoPosition();
 
+      if (!geoPos) {
+        this.errorMessage.set('Se requiere geolocalización real para marcar asistencia');
+        this.mode.set('error');
+        this.autoDismissAfter(4000);
+        return;
+      }
+
       // Determine check-in vs check-out (for now, always check-in - could be enhanced)
       // TODO: Add logic to determine if it's check-in or check-out based on last record
       const request = {
         images: frames,
-        latitude: geoPos?.latitude,
-        longitude: geoPos?.longitude,
+        latitude: geoPos.latitude,
+        longitude: geoPos.longitude,
       };
 
       // Send to backend
@@ -573,7 +581,9 @@ export class AttendanceScanComponent implements OnInit, OnDestroy {
       });
     } catch (error) {
       console.error('Scan error:', error);
-      this.errorMessage.set('Error al capturar las imágenes');
+      this.errorMessage.set(
+        error instanceof Error ? error.message : 'Error al capturar las imágenes'
+      );
       this.mode.set('error');
       this.autoDismissAfter(4000);
     }

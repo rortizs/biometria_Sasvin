@@ -3,7 +3,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-_BASE64_IMAGE_EXAMPLE = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBg..."
+_BASE64_IMAGE_EXAMPLE = (
+    "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBg..."
+)
 
 
 class StageMetrics(BaseModel):
@@ -33,9 +35,12 @@ class FaceRegisterRequest(BaseModel):
     )
     images: list[str] = Field(
         ...,
+        min_length=3,
+        max_length=5,
         description=(
-            "1 a 5 fotos del empleado en base64 (data URL o base64 puro). "
-            "Usar fotos con distintos ángulos y luminosidad para mejor precisión del embedding."
+            "3 a 5 fotos del empleado en base64 (data URL o base64 puro). "
+            "Usar fotos con distintos ángulos y luminosidad para mejor precisión del embedding. "
+            "Se requieren al menos 3 imágenes para la detección de vida (liveness check)."
         ),
     )
     session_id: str | None = None

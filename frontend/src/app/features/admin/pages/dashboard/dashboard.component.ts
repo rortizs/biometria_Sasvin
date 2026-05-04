@@ -120,6 +120,7 @@ import { NotificationBellComponent } from '../../../../core/components/notificat
                   <th>Entrada</th>
                   <th>Salida</th>
                   <th>Estado</th>
+                  <th>Geolocalización</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,6 +133,24 @@ import { NotificationBellComponent } from '../../../../core/components/notificat
                       <span class="status" [class]="record.status">
                         {{ getStatusLabel(record.status) }}
                       </span>
+                    </td>
+                    <td>
+                      <div class="geo-cell">
+                        <div class="geo-row">
+                          <strong>Entrada:</strong>
+                          <span>{{ formatCoordinates(record.check_in_latitude, record.check_in_longitude) }}</span>
+                        </div>
+                        <div class="geo-row">
+                          <strong>Distancia:</strong>
+                          <span>{{ formatDistance(record.check_in_distance_meters ?? record.distance_meters) }}</span>
+                        </div>
+                        <div class="geo-row">
+                          <strong>Estado:</strong>
+                          <span [class.geo-ok]="record.geo_validated" [class.geo-bad]="record.geo_validated === false">
+                            {{ record.geo_validated ? 'Validada' : 'No validada' }}
+                          </span>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 }
@@ -335,6 +354,31 @@ import { NotificationBellComponent } from '../../../../core/components/notificat
     .status.late { background: #fef3c7; color: #92400e; }
     .status.absent { background: #fee2e2; color: #991b1b; }
 
+    .geo-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.8125rem;
+      color: #374151;
+    }
+
+    .geo-row {
+      display: flex;
+      gap: 0.35rem;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+
+    .geo-ok {
+      color: #166534;
+      font-weight: 600;
+    }
+
+    .geo-bad {
+      color: #991b1b;
+      font-weight: 600;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .dashboard {
@@ -459,6 +503,22 @@ export class DashboardComponent implements OnInit {
       early_leave: 'Salida temprana',
     };
     return labels[status] || status;
+  }
+
+  formatCoordinates(latitude?: number | null, longitude?: number | null): string {
+    if (latitude == null || longitude == null) {
+      return '-';
+    }
+
+    return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+  }
+
+  formatDistance(distance?: number | null): string {
+    if (distance == null) {
+      return '-';
+    }
+
+    return `${distance.toFixed(1)}m`;
   }
 
   logout(): void {

@@ -12,14 +12,21 @@ def _as_utc(dt: datetime | None) -> str | None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.isoformat()
 
-_BASE64_IMAGE_EXAMPLE = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBg..."
+
+_BASE64_IMAGE_EXAMPLE = (
+    "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBg..."
+)
 
 
 class AttendanceCheckIn(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "images": [_BASE64_IMAGE_EXAMPLE],
+                "images": [
+                    _BASE64_IMAGE_EXAMPLE,
+                    _BASE64_IMAGE_EXAMPLE,
+                    _BASE64_IMAGE_EXAMPLE,
+                ],
                 "latitude": 14.6407,
                 "longitude": -90.5133,
             }
@@ -28,11 +35,11 @@ class AttendanceCheckIn(BaseModel):
 
     images: list[str] = Field(
         ...,
-        min_length=1,
+        min_length=3,
         max_length=5,
         description=(
-            "1 a 5 fotos del rostro en formato base64 (data URL o base64 puro). "
-            "Se recomienda 3 fotos con 250 ms de diferencia entre capturas."
+            "3 a 5 fotos del rostro en formato base64 (data URL o base64 puro). "
+            "Se requieren al menos 3 fotos con 250 ms de diferencia entre capturas para liveness detection."
         ),
     )
     image: str | None = None  # DEPRECATED: backward compat alias
@@ -41,13 +48,13 @@ class AttendanceCheckIn(BaseModel):
         default=None,
         ge=-90,
         le=90,
-        description="Latitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+        description="Latitud GPS del dispositivo. Requerida para validar que el marcaje ocurra dentro del perímetro autorizado.",
     )
     longitude: float | None = Field(
         default=None,
         ge=-180,
         le=180,
-        description="Longitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+        description="Longitud GPS del dispositivo. Requerida para validar que el marcaje ocurra dentro del perímetro autorizado.",
     )
 
     @model_validator(mode="before")
@@ -64,7 +71,11 @@ class AttendanceCheckOut(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "images": [_BASE64_IMAGE_EXAMPLE],
+                "images": [
+                    _BASE64_IMAGE_EXAMPLE,
+                    _BASE64_IMAGE_EXAMPLE,
+                    _BASE64_IMAGE_EXAMPLE,
+                ],
                 "latitude": 14.6407,
                 "longitude": -90.5133,
             }
@@ -73,11 +84,11 @@ class AttendanceCheckOut(BaseModel):
 
     images: list[str] = Field(
         ...,
-        min_length=1,
+        min_length=3,
         max_length=5,
         description=(
-            "1 a 5 fotos del rostro en formato base64 (data URL o base64 puro). "
-            "Se recomienda 3 fotos con 250 ms de diferencia entre capturas."
+            "3 a 5 fotos del rostro en formato base64 (data URL o base64 puro). "
+            "Se requieren al menos 3 fotos con 250 ms de diferencia entre capturas para liveness detection."
         ),
     )
     image: str | None = None  # DEPRECATED: backward compat alias
@@ -86,13 +97,13 @@ class AttendanceCheckOut(BaseModel):
         default=None,
         ge=-90,
         le=90,
-        description="Latitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+        description="Latitud GPS del dispositivo. Requerida para validar que el marcaje ocurra dentro del perímetro autorizado.",
     )
     longitude: float | None = Field(
         default=None,
         ge=-180,
         le=180,
-        description="Longitud GPS del dispositivo. Opcional — no bloquea el registro si se omite.",
+        description="Longitud GPS del dispositivo. Requerida para validar que el marcaje ocurra dentro del perímetro autorizado.",
     )
 
     @model_validator(mode="before")
@@ -117,10 +128,16 @@ class AttendanceResponse(BaseModel):
     message: str | None = None
     geo_validated: bool = False
     distance_meters: float | None = None
+    check_in_latitude: float | None = None
+    check_in_longitude: float | None = None
+    check_in_distance_meters: float | None = None
+    check_out_latitude: float | None = None
+    check_out_longitude: float | None = None
+    check_out_distance_meters: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_serializer('check_in', 'check_out')
+    @field_serializer("check_in", "check_out")
     def serialize_datetime(self, dt: datetime | None) -> str | None:
         return _as_utc(dt)
 
@@ -148,6 +165,6 @@ class AttendanceRecordResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_serializer('check_in', 'check_out', 'created_at')
+    @field_serializer("check_in", "check_out", "created_at")
     def serialize_datetime(self, dt: datetime | None) -> str | None:
         return _as_utc(dt)
