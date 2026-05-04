@@ -198,6 +198,7 @@ interface AttendanceSummary {
                   <th>Estado</th>
                   <th>Confianza</th>
                   <th>Ubicacion</th>
+                  <th>Coordenadas</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,6 +253,13 @@ interface AttendanceSummary {
                         <span class="no-data">-</span>
                       }
                     </td>
+                    <td>
+                      <div class="geo-details">
+                        <div><strong>In:</strong> {{ formatCoordinates(record.check_in_latitude, record.check_in_longitude) }}</div>
+                        <div><strong>Out:</strong> {{ formatCoordinates(record.check_out_latitude, record.check_out_longitude) }}</div>
+                        <div><strong>Dist:</strong> {{ formatGeoDistances(record) }}</div>
+                      </div>
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -302,6 +310,14 @@ interface AttendanceSummary {
                         <span class="mobile-value">{{ (record.confidence * 100) | number: '1.0-0' }}%</span>
                       </div>
                     }
+                    <div class="mobile-field mobile-field-geo">
+                      <span class="mobile-label">Geo</span>
+                      <span class="mobile-value mobile-geo-value">
+                        In: {{ formatCoordinates(record.check_in_latitude, record.check_in_longitude) }} ·
+                        Out: {{ formatCoordinates(record.check_out_latitude, record.check_out_longitude) }} ·
+                        Dist: {{ formatGeoDistances(record) }}
+                      </span>
+                    </div>
                   </div>
                 </div>
               }
@@ -767,6 +783,15 @@ interface AttendanceSummary {
       font-size: 0.875rem;
     }
 
+    .geo-details {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      font-size: 0.75rem;
+      color: #374151;
+      min-width: 210px;
+    }
+
     .no-data {
       color: #9ca3af;
     }
@@ -817,6 +842,17 @@ interface AttendanceSummary {
     .mobile-value {
       color: #1f2937;
       font-weight: 500;
+    }
+
+    .mobile-field-geo {
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .mobile-geo-value {
+      text-align: right;
+      font-size: 0.8125rem;
+      line-height: 1.35;
     }
 
     /* Responsive */
@@ -1083,6 +1119,33 @@ export class AttendanceComponent implements OnInit {
     return `${hours}h ${minutes}m`;
   }
 
+  formatCoordinates(latitude?: number | null, longitude?: number | null): string {
+    if (latitude == null || longitude == null) {
+      return '-';
+    }
+
+    return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+  }
+
+  formatDistance(distance?: number | null): string {
+    if (distance == null) {
+      return '-';
+    }
+
+    return `${distance.toFixed(1)}m`;
+  }
+
+  formatGeoDistances(record: AttendanceRecord): string {
+    const checkIn = this.formatDistance(record.check_in_distance_meters);
+    const checkOut = this.formatDistance(record.check_out_distance_meters);
+
+    if (checkIn === '-' && checkOut === '-') {
+      return '-';
+    }
+
+    return `In ${checkIn} / Out ${checkOut}`;
+  }
+
   exportToCSV(): void {
     const records = this.filteredAttendance();
     if (records.length === 0) return;
@@ -1097,6 +1160,10 @@ export class AttendanceComponent implements OnInit {
       'Estado',
       'Confianza (%)',
       'Ubicacion Validada',
+      'Coordenadas Entrada',
+      'Coordenadas Salida',
+      'Distancia Entrada',
+      'Distancia Salida',
     ];
 
     // CSV rows
@@ -1109,6 +1176,10 @@ export class AttendanceComponent implements OnInit {
       this.getStatusLabel(record.status),
       record.confidence ? Math.round(record.confidence * 100).toString() : '-',
       record.geo_validated !== undefined ? (record.geo_validated ? 'Si' : 'No') : '-',
+      this.formatCoordinates(record.check_in_latitude, record.check_in_longitude),
+      this.formatCoordinates(record.check_out_latitude, record.check_out_longitude),
+      this.formatDistance(record.check_in_distance_meters),
+      this.formatDistance(record.check_out_distance_meters),
     ]);
 
     // Build CSV content

@@ -17,7 +17,12 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.endpoints.attendance import check_in, check_out
+from app.api.v1.endpoints.attendance import (
+    check_in,
+    check_out,
+    list_attendance,
+    list_today_attendance,
+)
 from app.schemas.attendance import AttendanceCheckIn, AttendanceCheckOut
 from app.models.employee import Employee
 from app.models.location import Location
@@ -41,6 +46,15 @@ def mock_db_execute_result(return_values: list):
         mock_result.scalar_one_or_none.return_value = value
         results.append(mock_result)
     return results
+
+
+def mock_db_execute_scalars_all(records: list):
+    """Helper to mock db.execute() for list queries using scalars().all()."""
+    mock_result = MagicMock()
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = records
+    mock_result.scalars.return_value = mock_scalars
+    return mock_result
 
 
 @pytest.fixture
@@ -135,7 +149,7 @@ class TestCheckInEndpoint:
 
             # Mock database queries
             mock_db.execute = AsyncMock(
-                side_effect=mock_db_execute_result([mock_location, None])
+                side_effect=mock_db_execute_result([None, mock_location])
             )
 
             # Act
@@ -173,7 +187,7 @@ class TestCheckInEndpoint:
 
             # Mock database
             mock_db.execute = AsyncMock(
-                side_effect=mock_db_execute_result([mock_location, None])
+                side_effect=mock_db_execute_result([None, mock_location])
             )
 
             # Act
@@ -248,10 +262,10 @@ class TestCheckInEndpoint:
             assert "Error processing image" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_checkin_without_gps_coordinates(
+    async def test_checkin_without_gps_coordinates_is_rejected(
         self, mock_db, mock_employee, mock_location
     ):
-        """Should allow check-in without GPS (geo_validated=False)."""
+        """Should reject check-in when GPS coordinates are missing."""
         # Arrange
         request = AttendanceCheckIn(
             images=["base64img1"],
@@ -270,17 +284,18 @@ class TestCheckInEndpoint:
             mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None]))
 
             # Act
-            response = await check_in(mock_db, request)
+            with pytest.raises(HTTPException) as exc_info:
+                await check_in(mock_db, request)
 
             # Assert
-            assert response.geo_validated is False
-            assert response.distance_meters is None
+            assert exc_info.value.status_code == 400
+            assert "GPS" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_checkin_outside_permitted_area(
+    async def test_checkin_outside_permitted_area_is_rejected(
         self, mock_db, mock_employee, mock_location
     ):
-        """Should mark geo_validated=False if outside radius."""
+        """Should reject check-in if employee is outside permitted radius."""
         # Arrange - coordinates far from location
         request = AttendanceCheckIn(
             images=["base64img1"],
@@ -298,16 +313,16 @@ class TestCheckInEndpoint:
 
             # Mock database
             mock_db.execute = AsyncMock(
-                side_effect=mock_db_execute_result([mock_location, None])
+                side_effect=mock_db_execute_result([None, mock_location])
             )
 
             # Act
-            response = await check_in(mock_db, request)
+            with pytest.raises(HTTPException) as exc_info:
+                await check_in(mock_db, request)
 
             # Assert
-            assert response.geo_validated is False
-            assert response.distance_meters is not None
-            assert response.distance_meters > 100  # Outside radius
+            assert exc_info.value.status_code == 403
+            assert "Outside permitted area" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_already_checked_in_today(
@@ -379,7 +394,7 @@ class TestCheckOutEndpoint:
             # Mock database
             mock_db.execute = AsyncMock(
                 side_effect=mock_db_execute_result(
-                    [mock_location, mock_attendance_record]
+                    [mock_attendance_record, mock_location]
                 )
             )
 
@@ -462,10 +477,10 @@ class TestCheckOutEndpoint:
             assert response.check_out == mock_attendance_record.check_out
 
     @pytest.mark.asyncio
-    async def test_checkout_invalidates_geo_if_both_not_valid(
+    async def test_checkout_outside_radius_is_rejected(
         self, mock_db, mock_employee, mock_location, mock_attendance_record
     ):
-        """geo_validated should be False if check-out is outside radius."""
+        """Should reject check-out if employee is outside permitted radius."""
         # Arrange
         request = AttendanceCheckOut(
             images=["base64img1"],
@@ -488,14 +503,73 @@ class TestCheckOutEndpoint:
             # Mock database
             mock_db.execute = AsyncMock(
                 side_effect=mock_db_execute_result(
-                    [mock_location, mock_attendance_record]
+                    [mock_attendance_record, mock_location]
                 )
             )
 
             # Act
-            response = await check_out(mock_db, request)
+            with pytest.raises(HTTPException) as exc_info:
+                await check_out(mock_db, request)
 
             # Assert
-            # geo_validated should be False because check-out is outside radius
-            # (even though check-in was valid)
-            assert response.geo_validated is False
+            assert exc_info.value.status_code == 403
+            assert "Outside permitted area" in exc_info.value.detail
+
+
+class TestAttendanceListEndpoints:
+    """Test attendance list/report endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_list_attendance_includes_geolocation_fields(
+        self, mock_db, mock_attendance_record
+    ):
+        """Should include stored geolocation coordinates and distances in reports."""
+        mock_attendance_record.employee = MagicMock(full_name="Juan Pérez")
+        mock_attendance_record.check_in_latitude = 14.2971
+        mock_attendance_record.check_in_longitude = -89.8956
+        mock_attendance_record.check_in_distance_meters = 12.5
+        mock_attendance_record.check_out_latitude = 14.2973
+        mock_attendance_record.check_out_longitude = -89.8952
+        mock_attendance_record.check_out_distance_meters = 15.2
+        mock_attendance_record.created_at = datetime.utcnow()
+
+        mock_db.execute = AsyncMock(
+            return_value=mock_db_execute_scalars_all([mock_attendance_record])
+        )
+
+        response = await list_attendance(mock_db, MagicMock(), skip=0, limit=100)
+
+        assert len(response) == 1
+        assert response[0].employee_name == "Juan Pérez"
+        assert response[0].check_in_latitude == 14.2971
+        assert response[0].check_in_longitude == -89.8956
+        assert response[0].check_in_distance_meters == 12.5
+        assert response[0].check_out_latitude == 14.2973
+        assert response[0].check_out_longitude == -89.8952
+        assert response[0].check_out_distance_meters == 15.2
+
+    @pytest.mark.asyncio
+    async def test_list_today_attendance_includes_geolocation_fields(
+        self, mock_db, mock_attendance_record
+    ):
+        """Should include geolocation fields in dashboard live view."""
+        mock_attendance_record.employee = MagicMock(full_name="Juan Pérez")
+        mock_attendance_record.check_in_latitude = 14.2971
+        mock_attendance_record.check_in_longitude = -89.8956
+        mock_attendance_record.check_in_distance_meters = 12.5
+        mock_attendance_record.check_out_latitude = None
+        mock_attendance_record.check_out_longitude = None
+        mock_attendance_record.check_out_distance_meters = None
+        mock_attendance_record.created_at = datetime.utcnow()
+
+        mock_db.execute = AsyncMock(
+            return_value=mock_db_execute_scalars_all([mock_attendance_record])
+        )
+
+        response = await list_today_attendance(mock_db, MagicMock())
+
+        assert len(response) == 1
+        assert response[0].employee_name == "Juan Pérez"
+        assert response[0].check_in_latitude == 14.2971
+        assert response[0].check_in_longitude == -89.8956
+        assert response[0].check_in_distance_meters == 12.5
