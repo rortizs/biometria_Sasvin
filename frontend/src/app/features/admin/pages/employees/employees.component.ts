@@ -9,6 +9,7 @@ import { PositionService } from '../../../../core/services/position.service';
 import { DepartmentService } from '../../../../core/services/department.service';
 import { LocationService } from '../../../../core/services/location.service';
 import { CameraService } from '../../../../core/services/camera.service';
+import { LivenessService } from '../../../../core/services/liveness.service';
 import { Employee, EmployeeCreate } from '../../../../core/models/employee.model';
 import { Position } from '../../../../core/models/position.model';
 import { Department } from '../../../../core/models/department.model';
@@ -928,6 +929,7 @@ export class EmployeesComponent implements OnInit {
   private readonly departmentService = inject(DepartmentService);
   private readonly locationService = inject(LocationService);
   private readonly cameraService = inject(CameraService);
+  private readonly livenessService = inject(LivenessService);
 
   readonly employees = signal<Employee[]>([]);
   readonly positions = signal<Position[]>([]);
@@ -1150,7 +1152,7 @@ export class EmployeesComponent implements OnInit {
     this.statusIsError.set(false);
 
     // Flash verde por 1.2s, luego avanzar al siguiente paso
-    this.flashTimer = setTimeout(() => {
+    this.flashTimer = setTimeout(async () => {
       this.stepCaptured.set(false);
       const nextStep = this.faceStep() + 1;
       if (nextStep < this.faceSteps.length) {
@@ -1159,38 +1161,19 @@ export class EmployeesComponent implements OnInit {
         this.statusIsError.set(false);
       } else {
         this.statusMsg.set('¡Perfecto! Verificando variación entre fotos...');
-        this.verifyLiveness();
+        await this.verifyLiveness();
       }
     }, 1200);
   }
 
-  private verifyLiveness(): void {
-    // ─────────────────────────────────────────────────────────────
-    // VERIFICACIÓN DE LIVENESS (anti-spoofing básico por variación)
-    //
-    // Estrategia: comparar el tamaño del string base64 entre las
-    // 5 fotos capturadas. Una foto impresa o en pantalla produce
-    // frames casi idénticos en los 5 ángulos porque el contenido
-    // visual no cambia. Una persona real que mueve la cabeza genera
-    // frames con distinto volumen de información (distintas texturas,
-    // sombras, perspectivas) → diferente tamaño de base64.
-    //
-    // Umbral: si la variación relativa entre el frame más grande y
-    // el más pequeño es menor a 0.5% → rechazamos como foto estática.
-    // Con 5 fotos a 10 seg c/u el umbral es más estricto que con 3.
-    // ─────────────────────────────────────────────────────────────
+  private async verifyLiveness(): Promise<void> {
     const images = this.capturedImages();
-    if (images.length < 5) return;
+    if (images.length < 2) return;
 
-    const sizes = images.map(img => img.length);
-    const maxSize = Math.max(...sizes);
-    const minSize = Math.min(...sizes);
-    const variation = (maxSize - minSize) / maxSize;
+    const result = await this.livenessService.analyzeLiveness(images);
 
-    if (variation < 0.005) {
-      // Menos del 0.5% de variación entre las 5 fotos → probablemente
-      // una foto estática o el usuario no movió la cabeza.
-      this.statusMsg.set('⚠️ Las fotos son muy similares. Asegurate de mover la cabeza en cada paso e intentá de nuevo.');
+    if (!result.isLive) {
+      this.statusMsg.set('⚠️ Se detectaron imágenes estáticas. Asegurate de que sea tu rostro real y mové la cabeza en cada paso e intentá de nuevo.');
       this.statusIsError.set(true);
       this.capturedImages.set([]);
       this.faceStep.set(0);

@@ -117,3 +117,42 @@ class FaceRecognitionService:
         confidence = max(0, 1 - (distance / 1.0))
 
         return is_match, confidence
+
+    def check_liveness_from_embeddings(
+        self,
+        embeddings: list[np.ndarray],
+        min_variance_threshold: float = 0.004,
+    ) -> tuple[bool, float]:
+        """
+        Detect liveness from multiple embeddings captured at short intervals.
+
+        A static photo produces near-identical embeddings (cosine distance ≈ 0).
+        A live face produces natural micro-variation (blinking, breathing, micro-movement).
+
+        Returns (is_live, max_variance) where:
+        - is_live: True if variance exceeds threshold
+        - max_variance: maximum cosine distance between any two embeddings
+
+        Requires at least 2 embeddings. With 1 embedding, returns (False, 0.0).
+        Threshold 0.004: calibrated for dlib 128-d embeddings with 250ms frame interval.
+        """
+        if len(embeddings) < 2:
+            return False, 0.0
+
+        max_variance = 0.0
+        for i in range(len(embeddings)):
+            for j in range(i + 1, len(embeddings)):
+                # Cosine distance = 1 - cosine_similarity
+                a = embeddings[i]
+                b = embeddings[j]
+                norm_a = np.linalg.norm(a)
+                norm_b = np.linalg.norm(b)
+                if norm_a == 0 or norm_b == 0:
+                    continue
+                cosine_sim = np.dot(a, b) / (norm_a * norm_b)
+                cosine_dist = 1.0 - float(cosine_sim)
+                if cosine_dist > max_variance:
+                    max_variance = cosine_dist
+
+        is_live = max_variance >= min_variance_threshold
+        return is_live, max_variance

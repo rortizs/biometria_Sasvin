@@ -62,6 +62,27 @@ async def _validate_geo(
     return validation.is_valid, validation.distance_meters
 
 
+def _require_gps_coordinates(latitude: float | None, longitude: float | None) -> None:
+    """Attendance marking requires real GPS coordinates."""
+    if latitude is None or longitude is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GPS coordinates are required to validate attendance location",
+        )
+
+
+def _reject_if_outside_perimeter(distance: float | None) -> None:
+    """Reject attendance when device is outside the allowed radius."""
+    detail = "Outside permitted area"
+    if distance is not None:
+        detail += f": {distance:.0f}m"
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=detail,
+    )
+
+
 @router.post(
     "/check-in",
     response_model=AttendanceResponse,
@@ -69,7 +90,9 @@ async def _validate_geo(
     responses={
         400: {"description": "No se detectó rostro en la imagen o error al procesarla"},
         404: {"description": "Ningún empleado coincide con el rostro enviado"},
-        422: {"description": "Error de validación — coordenadas inválidas o imágenes faltantes"},
+        422: {
+            "description": "Error de validación — coordenadas inválidas o imágenes faltantes"
+        },
     },
 )
 async def check_in(
@@ -90,24 +113,39 @@ async def check_in(
 
     **Nota:** Si el empleado ya tiene check-in hoy, devuelve el registro existente
     con `message` indicando la hora del check-in previo. La geolocalización es
-    **opcional** — su ausencia o fallo no bloquea el registro.
+    **obligatoria** y el marcaje se rechaza si está fuera del perímetro permitido.
     """
     face_service = FaceRecognitionService()
 
-    # Get embedding from first image in the array
+    # Extract embeddings from ALL frames for liveness detection
+    all_embeddings: list = []
     try:
-        query_embedding = face_service.get_face_embedding(request.images[0])
+        for img_b64 in request.images:
+            emb = face_service.get_face_embedding(img_b64)
+            if emb is not None:
+                all_embeddings.append(emb)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error processing image: {str(e)}",
         )
 
-    if query_embedding is None:
+    if not all_embeddings:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No face detected in the provided image",
+            detail="No face detected in the provided images",
         )
+
+    # Liveness check: require variance between frames
+    if len(all_embeddings) >= 2:
+        is_live, variance = face_service.check_liveness_from_embeddings(all_embeddings)
+        if not is_live:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Liveness check failed: static image detected. Please use your real face.",
+            )
+
+    query_embedding = all_embeddings[0]
 
     # Find best match
     match = await face_service.find_best_match(db, query_embedding)
@@ -121,11 +159,6 @@ async def check_in(
     employee, confidence = match
     today = date.today()
     now = datetime.utcnow()
-
-    # Validate geolocation
-    geo_valid, distance = await _validate_geo(
-        db, employee, request.latitude, request.longitude
-    )
 
     # Check if already checked in today
     result = await db.execute(
@@ -157,6 +190,16 @@ async def check_in(
             record_date=today,
         )
         db.add(attendance)
+
+    _require_gps_coordinates(request.latitude, request.longitude)
+
+    # Validate geolocation
+    geo_valid, distance = await _validate_geo(
+        db, employee, request.latitude, request.longitude
+    )
+
+    if not geo_valid:
+        _reject_if_outside_perimeter(distance)
 
     attendance.check_in = now
     attendance.check_in_confidence = confidence
@@ -190,6 +233,12 @@ async def check_in(
         confidence=confidence,
         geo_validated=geo_valid,
         distance_meters=distance,
+        check_in_latitude=attendance.check_in_latitude,
+        check_in_longitude=attendance.check_in_longitude,
+        check_in_distance_meters=attendance.check_in_distance_meters,
+        check_out_latitude=attendance.check_out_latitude,
+        check_out_longitude=attendance.check_out_longitude,
+        check_out_distance_meters=attendance.check_out_distance_meters,
         message=message,
     )
 
@@ -199,9 +248,13 @@ async def check_in(
     response_model=AttendanceResponse,
     tags=["attendance"],
     responses={
-        400: {"description": "No se detectó rostro, error de imagen, o no existe check-in previo para hoy"},
+        400: {
+            "description": "No se detectó rostro, error de imagen, o no existe check-in previo para hoy"
+        },
         404: {"description": "Ningún empleado coincide con el rostro enviado"},
-        422: {"description": "Error de validación — coordenadas inválidas o imágenes faltantes"},
+        422: {
+            "description": "Error de validación — coordenadas inválidas o imágenes faltantes"
+        },
     },
 )
 async def check_out(
@@ -221,23 +274,40 @@ async def check_out(
     5. `geo_validated` se mantiene `true` solo si tanto check-in como check-out fueron válidos
 
     **Nota:** Si el empleado ya tiene check-out hoy, devuelve el registro existente
-    con `message` indicando la hora del check-out previo.
+    con `message` indicando la hora del check-out previo. La geolocalización es
+    obligatoria y el marcaje se rechaza si está fuera del perímetro permitido.
     """
     face_service = FaceRecognitionService()
 
+    # Extract embeddings from ALL frames for liveness detection
+    all_embeddings: list = []
     try:
-        query_embedding = face_service.get_face_embedding(request.images[0])
+        for img_b64 in request.images:
+            emb = face_service.get_face_embedding(img_b64)
+            if emb is not None:
+                all_embeddings.append(emb)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error processing image: {str(e)}",
         )
 
-    if query_embedding is None:
+    if not all_embeddings:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No face detected in the provided image",
+            detail="No face detected in the provided images",
         )
+
+    # Liveness check: require variance between frames
+    if len(all_embeddings) >= 2:
+        is_live, variance = face_service.check_liveness_from_embeddings(all_embeddings)
+        if not is_live:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Liveness check failed: static image detected. Please use your real face.",
+            )
+
+    query_embedding = all_embeddings[0]
 
     match = await face_service.find_best_match(db, query_embedding)
 
@@ -250,11 +320,6 @@ async def check_out(
     employee, confidence = match
     today = date.today()
     now = datetime.utcnow()
-
-    # Validate geolocation
-    geo_valid, distance = await _validate_geo(
-        db, employee, request.latitude, request.longitude
-    )
 
     result = await db.execute(
         select(AttendanceRecord).where(
@@ -284,6 +349,16 @@ async def check_out(
             distance_meters=attendance.check_out_distance_meters,
             message=f"Already checked out at {attendance.check_out.strftime('%H:%M')}",
         )
+
+    _require_gps_coordinates(request.latitude, request.longitude)
+
+    # Validate geolocation
+    geo_valid, distance = await _validate_geo(
+        db, employee, request.latitude, request.longitude
+    )
+
+    if not geo_valid:
+        _reject_if_outside_perimeter(distance)
 
     attendance.check_out = now
     attendance.check_out_confidence = confidence
@@ -320,6 +395,12 @@ async def check_out(
         confidence=confidence,
         geo_validated=attendance.geo_validated,
         distance_meters=distance,
+        check_in_latitude=attendance.check_in_latitude,
+        check_in_longitude=attendance.check_in_longitude,
+        check_in_distance_meters=attendance.check_in_distance_meters,
+        check_out_latitude=attendance.check_out_latitude,
+        check_out_longitude=attendance.check_out_longitude,
+        check_out_distance_meters=attendance.check_out_distance_meters,
         message=message,
     )
 
@@ -389,6 +470,12 @@ async def list_attendance(
             confidence=r.check_in_confidence,
             geo_validated=r.geo_validated,
             distance_meters=r.check_in_distance_meters,
+            check_in_latitude=r.check_in_latitude,
+            check_in_longitude=r.check_in_longitude,
+            check_in_distance_meters=r.check_in_distance_meters,
+            check_out_latitude=r.check_out_latitude,
+            check_out_longitude=r.check_out_longitude,
+            check_out_distance_meters=r.check_out_distance_meters,
         )
         for r in records
     ]
@@ -437,6 +524,12 @@ async def list_today_attendance(
             confidence=r.check_in_confidence,
             geo_validated=r.geo_validated,
             distance_meters=r.check_in_distance_meters,
+            check_in_latitude=r.check_in_latitude,
+            check_in_longitude=r.check_in_longitude,
+            check_in_distance_meters=r.check_in_distance_meters,
+            check_out_latitude=r.check_out_latitude,
+            check_out_longitude=r.check_out_longitude,
+            check_out_distance_meters=r.check_out_distance_meters,
         )
         for r in records
     ]
