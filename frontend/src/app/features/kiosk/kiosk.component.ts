@@ -19,6 +19,7 @@ import { AttendanceService } from '../../core/services/attendance.service';
 import { GeolocationService } from '../../core/services/geolocation.service';
 import { LocationService } from '../../core/services/location.service';
 import { PlatformService } from '../../core/services/platform.service';
+import { LivenessService } from '../../core/services/liveness.service';
 import { GeoPosition } from '../../core/models/geolocation.model';
 import { Location as AppLocation } from '../../core/models/location.model';
 import { AttendanceRecord } from '../../core/models/attendance.model';
@@ -58,6 +59,8 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
               <span class="geo-icon">📍</span> Obteniendo ubicación...
             } @else if (geoStatus() === 'success' && kioskLocation()) {
               <span class="geo-icon">✓</span> {{ kioskLocation()!.name }}
+            } @else if (geoStatus() === 'error' && kioskLocation()) {
+              <span class="geo-icon">⚠</span> GPS requerido · {{ kioskLocation()!.name }}
             } @else if (geoStatus() === 'success') {
               <span class="geo-icon">✓</span> Ubicación verificada
             } @else if (geoStatus() === 'error') {
@@ -808,6 +811,7 @@ export class KioskComponent implements OnInit, OnDestroy {
   private readonly geolocationService = inject(GeolocationService);
   private readonly locationService = inject(LocationService);
   private readonly platformService = inject(PlatformService);
+  private readonly livenessService = inject(LivenessService);
   private readonly swUpdate = inject(SwUpdate);
 
   private clockInterval?: ReturnType<typeof setInterval>;
@@ -863,8 +867,9 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.locationService.getLocation(savedId).subscribe({
       next: (location) => {
         this.kioskLocation.set(location);
-        if (this.currentPosition === null) {
-          this.applyKioskLocationAsPosition(location);
+        if (this.currentPosition === null && this.geoStatus() !== 'success') {
+          this.geoStatus.set('error');
+          this.geoError.set('GPS real no disponible. La sede configurada no reemplaza la ubicación del dispositivo.');
         }
       },
       error: () => {
@@ -882,7 +887,8 @@ export class KioskComponent implements OnInit, OnDestroy {
 
   private requestGeolocation(): void {
     if (!this.geolocationService.isSupported()) {
-      this.fallbackToKioskLocation();
+      this.geoStatus.set('error');
+      this.geoError.set('Este dispositivo no tiene geolocalización disponible.');
       return;
     }
 
@@ -891,35 +897,23 @@ export class KioskComponent implements OnInit, OnDestroy {
       next: (position) => {
         this.currentPosition = position;
         this.geoStatus.set('success');
+        this.geoError.set('');
       },
       error: () => {
-        this.fallbackToKioskLocation();
+        this.currentPosition = null;
+        this.geoStatus.set('error');
+        this.geoError.set('No se pudo obtener la ubicación GPS real del dispositivo.');
       },
     });
-  }
-
-  private fallbackToKioskLocation(): void {
-    const loc = this.kioskLocation();
-    if (loc) {
-      this.applyKioskLocationAsPosition(loc);
-    } else {
-      this.geoStatus.set('error');
-    }
-  }
-
-  private applyKioskLocationAsPosition(location: AppLocation): void {
-    this.currentPosition = {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      accuracy: 0,
-    };
-    this.geoStatus.set('success');
   }
 
   selectLocation(location: AppLocation): void {
     localStorage.setItem(KIOSK_LOCATION_KEY, location.id);
     this.kioskLocation.set(location);
-    this.applyKioskLocationAsPosition(location);
+    if (this.currentPosition === null) {
+      this.geoStatus.set('error');
+      this.geoError.set('Sede configurada. Falta GPS real para permitir el marcaje.');
+    }
     this.showLocationPicker.set(false);
   }
 
@@ -928,6 +922,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.kioskLocation.set(null);
     this.currentPosition = null;
     this.geoStatus.set('idle');
+    this.geoError.set('');
     this.showLocationPicker.set(false);
   }
 
@@ -988,23 +983,63 @@ export class KioskComponent implements OnInit, OnDestroy {
   }
 
   async scan(): Promise<void> {
-    // Capture 3 frames with 250ms delay for anti-spoofing
+    // Capture frames first (camera doesn't depend on GPS)
     const images = await this.cameraService.captureFrames(3, 250);
-    
+
     if (!images || images.length === 0) {
       this.errorMessage.set('No se pudo capturar la imagen');
       this.mode.set('error');
+      this.resetAfterDelay();
       return;
     }
 
     this.mode.set('scanning');
 
-    const request: { images: string[]; latitude?: number; longitude?: number } = { images };
-
-    if (this.currentPosition) {
-      request.latitude = this.currentPosition.latitude;
-      request.longitude = this.currentPosition.longitude;
+    // Client-side liveness check: detect static photos before sending to server
+    const livenessResult = await this.livenessService.analyzeLiveness(images);
+    if (!livenessResult.isLive) {
+      this.errorMessage.set('Se detectó una imagen estática. Por favor usá tu rostro real frente a la cámara.');
+      this.mode.set('error');
+      this.resetAfterDelay();
+      return;
     }
+
+    // Always request a fresh GPS position at scan time.
+    // Falls back to the cached position only if the fresh request fails
+    // and the cached one is less than 5 minutes old.
+    let position = this.currentPosition;
+
+    try {
+      position = await new Promise<GeoPosition>((resolve, reject) => {
+        this.geolocationService.getCurrentPosition().subscribe({
+          next: (pos) => {
+            this.currentPosition = pos;
+            this.geoStatus.set('success');
+            this.geoError.set('');
+            resolve(pos);
+          },
+          error: (err) => reject(err),
+        });
+      });
+    } catch {
+      // Fresh GPS failed — use cached position if available
+      if (!this.currentPosition) {
+        this.geoStatus.set('error');
+        this.geoError.set('No se pudo obtener la ubicación GPS real del dispositivo.');
+        this.errorMessage.set('Se requiere GPS real para marcar asistencia. Verificá los permisos de ubicación.');
+        this.mode.set('error');
+        this.resetAfterDelay();
+        return;
+      }
+      // currentPosition already set — use it as fallback
+      position = this.currentPosition;
+    }
+
+    const request: { images: string[]; latitude?: number; longitude?: number } = {
+      images,
+      latitude: position.latitude,
+      longitude: position.longitude,
+    };
 
     const action$ = this.isCheckIn()
       ? this.attendanceService.checkIn(request)
