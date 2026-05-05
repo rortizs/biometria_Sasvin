@@ -142,7 +142,7 @@ import { NotificationBellComponent } from '../../../../core/components/notificat
                         </div>
                         <div class="geo-row">
                           <strong>Distancia:</strong>
-                          <span>{{ formatDistance(record.check_in_distance_meters ?? record.distance_meters) }}</span>
+                          <span>{{ formatDistance(record.check_in_distance_meters) }}</span>
                         </div>
                         <div class="geo-row">
                           <strong>Estado:</strong>
