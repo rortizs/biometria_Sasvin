@@ -16,6 +16,14 @@
       "sessions": 1,
       "memories": 3,
       "prompts": 16
+    },
+    {
+      "id": "cb59f85c",
+      "created_by": "richardortiz",
+      "created_at": "2026-05-08T17:05:56Z",
+      "sessions": 0,
+      "memories": 0,
+      "prompts": 1
     }
   ]
 }
