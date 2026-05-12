@@ -29,6 +29,37 @@ interface WeekDay {
   isToday: boolean;
 }
 
+export function getAssignmentDates(
+  startDate: string,
+  endDate: string,
+  selectedWeekdays: number[]
+): string[] {
+  if (!startDate || !endDate || selectedWeekdays.length === 0) {
+    return [];
+  }
+
+  const selected = new Set(selectedWeekdays);
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  const current = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+  const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+  const dates: string[] = [];
+
+  if (Number.isNaN(current.getTime()) || Number.isNaN(end.getTime()) || current > end) {
+    return dates;
+  }
+
+  while (current <= end) {
+    const uiWeekday = (current.getUTCDay() + 6) % 7;
+    if (selected.has(uiWeekday)) {
+      dates.push(current.toISOString().split('T')[0]);
+    }
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
 @Component({
   selector: 'app-schedules',
   standalone: true,
@@ -1623,14 +1654,37 @@ export class SchedulesComponent implements OnInit {
   }
 
   saveAssignment(): void {
+    const employeeIds = this.selectedEmployees();
+    const dates = getAssignmentDates(
+      this.assignForm.startDate,
+      this.assignForm.endDate,
+      this.assignForm.daysOfWeek
+    );
+
+    if (employeeIds.length === 0) {
+      console.warn('No employees selected for schedule assignment');
+      return;
+    }
+
+    if (dates.length === 0) {
+      console.warn('No dates selected for schedule assignment');
+      return;
+    }
+
+    if (!this.assignForm.isDayOff && !this.assignForm.patternId) {
+      console.warn('Schedule pattern is required for schedule assignment');
+      return;
+    }
+
     const bulk: BulkScheduleAssignment = {
-      employee_ids: this.selectedEmployees(),
-      schedule_pattern_id: this.assignForm.patternId || undefined,
-      start_date: this.assignForm.startDate,
-      end_date: this.assignForm.endDate,
-      days_of_week: this.assignForm.daysOfWeek.length > 0 ? this.assignForm.daysOfWeek : undefined,
+      employee_ids: employeeIds,
+      dates,
       is_day_off: this.assignForm.isDayOff,
     };
+
+    if (!this.assignForm.isDayOff) {
+      bulk.schedule_id = this.assignForm.patternId;
+    }
 
     this.scheduleService.createBulkAssignments(bulk).subscribe({
       next: (result) => {

@@ -25,9 +25,16 @@ import { Location as AppLocation } from '../../core/models/location.model';
 import { AttendanceRecord } from '../../core/models/attendance.model';
 
 const KIOSK_LOCATION_KEY = 'kiosk_location_id';
+const KIOSK_RESULT_RESET_DELAY_MS = 12000;
 
 type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
 type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
+
+interface KioskErrorContent {
+  title: string;
+  message: string;
+  help: string;
+}
 
 @Component({
   selector: 'app-kiosk',
@@ -54,7 +61,12 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
         </div>
         <div class="header-center">
           <h1 class="title">Control de Asistencia</h1>
-          <button class="geo-status" [class]="geoStatus()" (click)="showLocationPicker.set(true)" title="Configurar sede del kiosk">
+          <button
+            class="geo-status"
+            [class]="geoStatus()"
+            (click)="showLocationPicker.set(true)"
+            title="Configurar sede del kiosk"
+          >
             @if (geoStatus() === 'loading') {
               <span class="geo-icon">📍</span> Obteniendo ubicación...
             } @else if (geoStatus() === 'success' && kioskLocation()) {
@@ -98,11 +110,20 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
               {{ isCheckIn() ? 'Entrada' : 'Salida' }}:
               {{ lastRecord()?.check_in || lastRecord()?.check_out | date: 'HH:mm' }}
             </p>
-            <p class="confidence">Confianza: {{ (lastRecord()?.confidence ?? 0) * 100 | number: '1.0-0' }}%</p>
+            <p class="confidence">
+              Confianza: {{ (lastRecord()?.confidence ?? 0) * 100 | number: '1.0-0' }}%
+            </p>
             @if (lastRecord()?.geo_validated !== undefined) {
-              <p class="geo-info" [class.valid]="lastRecord()?.geo_validated" [class.invalid]="!lastRecord()?.geo_validated">
+              <p
+                class="geo-info"
+                [class.valid]="lastRecord()?.geo_validated"
+                [class.invalid]="!lastRecord()?.geo_validated"
+              >
                 @if (lastRecord()?.geo_validated) {
-                  📍 Ubicación validada ({{ lastRecord()?.check_in_distance_meters?.toFixed(0) || lastRecord()?.check_out_distance_meters?.toFixed(0) }}m)
+                  📍 Ubicación validada ({{
+                    lastRecord()?.check_in_distance_meters?.toFixed(0) ||
+                      lastRecord()?.check_out_distance_meters?.toFixed(0)
+                  }}m)
                 } @else {
                   ⚠ Fuera de la sede asignada
                 }
@@ -113,26 +134,22 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
 
         @if (mode() === 'error') {
           <div class="result-panel error">
-            <div class="result-icon">✗</div>
-            <h2>Error</h2>
-            <p>{{ errorMessage() }}</p>
+            <div class="result-icon error-icon">!</div>
+            <div class="result-copy">
+              <span class="result-eyebrow">No se pudo marcar</span>
+              <h2>{{ errorTitle() }}</h2>
+              <p class="error-message">{{ errorMessage() }}</p>
+              <p class="error-help">{{ errorHelp() }}</p>
+            </div>
           </div>
         }
 
         <!-- Mode selector -->
         <div class="mode-selector">
-          <button
-            class="mode-btn"
-            [class.active]="isCheckIn()"
-            (click)="setCheckIn(true)"
-          >
+          <button class="mode-btn" [class.active]="isCheckIn()" (click)="setCheckIn(true)">
             Entrada
           </button>
-          <button
-            class="mode-btn"
-            [class.active]="!isCheckIn()"
-            (click)="setCheckIn(false)"
-          >
+          <button class="mode-btn" [class.active]="!isCheckIn()" (click)="setCheckIn(false)">
             Salida
           </button>
         </div>
@@ -141,11 +158,7 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
         <div class="instructions">
           @if (mode() === 'idle') {
             <p>Posicione su rostro frente a la cámara</p>
-            <button 
-              class="scan-btn" 
-              [disabled]="cameraService.capturing()"
-              (click)="scan()"
-            >
+            <button class="scan-btn" [disabled]="cameraService.capturing()" (click)="scan()">
               @if (cameraService.capturing()) {
                 <span class="button-spinner"></span>
                 Capturando...
@@ -162,7 +175,9 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
         <div class="location-modal-backdrop" (click)="showLocationPicker.set(false)">
           <div class="location-modal" (click)="$event.stopPropagation()">
             <h3 class="location-modal-title">Sede del Kiosk</h3>
-            <p class="location-modal-subtitle">Seleccioná la sede donde está instalado este kiosk</p>
+            <p class="location-modal-subtitle">
+              Seleccioná la sede donde está instalado este kiosk
+            </p>
             <div class="location-list">
               @for (loc of availableLocations(); track loc.id) {
                 <button
@@ -184,9 +199,13 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
               }
             </div>
             @if (kioskLocation()) {
-              <button class="location-clear-btn" (click)="clearLocation()">Quitar sede asignada</button>
+              <button class="location-clear-btn" (click)="clearLocation()">
+                Quitar sede asignada
+              </button>
             }
-            <button class="location-close-btn" (click)="showLocationPicker.set(false)">Cerrar</button>
+            <button class="location-close-btn" (click)="showLocationPicker.set(false)">
+              Cerrar
+            </button>
           </div>
         </div>
       }
@@ -194,7 +213,7 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
       <!-- Footer -->
       <footer class="kiosk-footer">
         <a routerLink="/admin/dashboard" class="admin-link">Administración</a>
-        
+
         <!-- PWA Install Button (only shown when installable and not dismissed) -->
         @if (showInstallButton() && !isStandalone()) {
           <div class="install-prompt">
@@ -202,7 +221,11 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
               <span class="install-icon">📲</span>
               Instalar Aplicación
             </button>
-            <button class="dismiss-btn" (click)="dismissInstallPrompt()" title="No mostrar nuevamente">
+            <button
+              class="dismiss-btn"
+              (click)="dismissInstallPrompt()"
+              title="No mostrar nuevamente"
+            >
               ✕
             </button>
           </div>
@@ -210,598 +233,663 @@ type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
       </footer>
     </div>
   `,
-  styles: [`
-    .kiosk-container {
-      display: flex;
-      flex-direction: column;
-      min-height: 100dvh;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: white;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-
-    .kiosk-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.5rem 2rem;
-      background: rgba(0, 0, 0, 0.3);
-    }
-
-    .clock {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .clock .time {
-      font-size: 2.5rem;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .clock .date {
-      font-size: 1rem;
-      opacity: 0.8;
-    }
-
-    .header-center {
-      text-align: center;
-    }
-
-    .title {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 0.25rem;
-    }
-
-    .geo-status {
-      font-size: 0.85rem;
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      border: none;
-      cursor: pointer;
-      font-family: inherit;
-      transition: opacity 0.2s;
-    }
-
-    .geo-status:hover {
-      opacity: 0.8;
-    }
-
-    .geo-status.loading {
-      background: rgba(59, 130, 246, 0.3);
-      color: #93c5fd;
-    }
-
-    .geo-status.success {
-      background: rgba(34, 197, 94, 0.3);
-      color: #86efac;
-    }
-
-    .geo-status.error {
-      background: rgba(239, 68, 68, 0.3);
-      color: #fca5a5;
-    }
-
-    .geo-icon {
-      font-size: 1rem;
-    }
-
-    .kiosk-main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-      gap: 2rem;
-    }
-
-    .camera-container {
-      position: relative;
-      width: 100%;
-      max-width: 500px;
-      aspect-ratio: 4/3;
-      border-radius: 1rem;
-      overflow: hidden;
-      background: #000;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    }
-
-    .camera-container.scanning {
-      box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
-    }
-
-    .camera-video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transform: scaleX(-1);
-    }
-
-    .camera-overlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .face-frame {
-      width: 60%;
-      height: 80%;
-      border: 3px dashed rgba(255, 255, 255, 0.5);
-      border-radius: 50%;
-    }
-
-    .scanning-indicator {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.7);
-      gap: 1rem;
-    }
-
-    .spinner {
-      width: 50px;
-      height: 50px;
-      border: 4px solid rgba(255, 255, 255, 0.3);
-      border-top-color: #3b82f6;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .result-panel {
-      padding: 2rem;
-      border-radius: 1rem;
-      text-align: center;
-      animation: slideIn 0.3s ease-out;
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
+  styles: [
+    `
+      .kiosk-container {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: white;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
       }
-      to {
-        opacity: 1;
-        transform: translateY(0);
+
+      .kiosk-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem 2rem;
+        background: rgba(0, 0, 0, 0.3);
       }
-    }
 
-    .result-panel.success {
-      background: rgba(34, 197, 94, 0.2);
-      border: 2px solid #22c55e;
-    }
-
-    .result-panel.error {
-      background: rgba(239, 68, 68, 0.2);
-      border: 2px solid #ef4444;
-    }
-
-    .result-icon {
-      font-size: 3rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .employee-name {
-      font-size: 1.5rem;
-      font-weight: 600;
-    }
-
-    .check-time {
-      font-size: 1.2rem;
-      opacity: 0.9;
-    }
-
-    .confidence {
-      font-size: 0.9rem;
-      opacity: 0.7;
-    }
-
-    .geo-info {
-      font-size: 0.85rem;
-      margin-top: 0.5rem;
-      padding: 0.25rem 0.75rem;
-      border-radius: 0.25rem;
-    }
-
-    .geo-info.valid {
-      background: rgba(34, 197, 94, 0.2);
-      color: #86efac;
-    }
-
-    .geo-info.invalid {
-      background: rgba(239, 68, 68, 0.2);
-      color: #fca5a5;
-    }
-
-    .mode-selector {
-      display: flex;
-      gap: 1rem;
-    }
-
-    .mode-btn {
-      /* Touch target: min 44x44px for tablets */
-      min-height: 44px;
-      min-width: 44px;
-      padding: 0.75rem 2rem;
-      font-size: 1rem;
-      font-weight: 500;
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      border-radius: 0.5rem;
-      background: transparent;
-      color: white;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .mode-btn:hover {
-      border-color: rgba(255, 255, 255, 0.5);
-    }
-
-    .mode-btn.active {
-      background: #3b82f6;
-      border-color: #3b82f6;
-    }
-
-    .instructions {
-      text-align: center;
-    }
-
-    .instructions p {
-      margin-bottom: 1rem;
-      opacity: 0.8;
-    }
-
-    .scan-btn {
-      /* Touch target: min 44x44px for tablets */
-      min-height: 44px;
-      min-width: 44px;
-      padding: 1rem 3rem;
-      font-size: 1.2rem;
-      font-weight: 600;
-      background: #3b82f6;
-      color: white;
-      border: none;
-      border-radius: 0.5rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-    }
-
-    .scan-btn:hover:not(:disabled) {
-      background: #2563eb;
-      transform: scale(1.02);
-    }
-
-    .scan-btn:active:not(:disabled) {
-      transform: scale(0.98);
-    }
-
-    .scan-btn:disabled {
-      background: rgba(59, 130, 246, 0.5);
-      cursor: not-allowed;
-      opacity: 0.7;
-    }
-
-    .button-spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    .kiosk-footer {
-      padding: 1rem;
-      text-align: center;
-      background: rgba(0, 0, 0, 0.3);
-    }
-
-    .admin-link {
-      /* Touch target: min 44x44px via padding */
-      display: inline-block;
-      min-height: 44px;
-      min-width: 44px;
-      padding: 0.75rem 1rem;
-      color: rgba(255, 255, 255, 0.5);
-      text-decoration: none;
-      font-size: 0.9rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .admin-link:hover {
-      color: white;
-    }
-
-    /* PWA Install Prompt Styles */
-    .install-prompt {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-      padding: 0.5rem;
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      border-radius: 0.5rem;
-      animation: slideUp 0.3s ease-out;
-    }
-
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
+      .clock {
+        display: flex;
+        flex-direction: column;
       }
-      to {
-        opacity: 1;
-        transform: translateY(0);
+
+      .clock .time {
+        font-size: 2.5rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
       }
-    }
 
-    .install-btn {
-      /* Touch target: min 44x44px */
-      min-height: 44px;
-      min-width: 44px;
-      padding: 0.75rem 1.25rem;
-      background: #3b82f6;
-      color: white;
-      border: none;
-      border-radius: 0.375rem;
-      font-size: 0.9rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+      .clock .date {
+        font-size: 1rem;
+        opacity: 0.8;
+      }
 
-    .install-btn:hover {
-      background: #2563eb;
-      transform: scale(1.02);
-    }
+      .header-center {
+        text-align: center;
+      }
 
-    .install-btn:active {
-      transform: scale(0.98);
-    }
+      .title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
 
-    .install-icon {
-      font-size: 1.2rem;
-    }
+      .geo-status {
+        font-size: 0.85rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        transition: opacity 0.2s;
+      }
 
-    .dismiss-btn {
-      /* Touch target: min 44x44px */
-      min-height: 44px;
-      min-width: 44px;
-      padding: 0.5rem;
-      background: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.6);
-      border: none;
-      border-radius: 0.375rem;
-      font-size: 1.2rem;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
+      .geo-status:hover {
+        opacity: 0.8;
+      }
 
-    .dismiss-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
-    }
+      .geo-status.loading {
+        background: rgba(59, 130, 246, 0.3);
+        color: #93c5fd;
+      }
 
-    /* Hide install prompt in standalone mode (already installed) */
-    @media (display-mode: standalone) {
+      .geo-status.success {
+        background: rgba(34, 197, 94, 0.3);
+        color: #86efac;
+      }
+
+      .geo-status.error {
+        background: rgba(239, 68, 68, 0.3);
+        color: #fca5a5;
+      }
+
+      .geo-icon {
+        font-size: 1rem;
+      }
+
+      .kiosk-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        gap: 2rem;
+      }
+
+      .camera-container {
+        position: relative;
+        width: 100%;
+        max-width: 500px;
+        aspect-ratio: 4/3;
+        border-radius: 1rem;
+        overflow: hidden;
+        background: #000;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      }
+
+      .camera-container.scanning {
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+      }
+
+      .camera-video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transform: scaleX(-1);
+      }
+
+      .camera-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .face-frame {
+        width: 60%;
+        height: 80%;
+        border: 3px dashed rgba(255, 255, 255, 0.5);
+        border-radius: 50%;
+      }
+
+      .scanning-indicator {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.7);
+        gap: 1rem;
+      }
+
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .result-panel {
+        padding: 2rem;
+        border-radius: 1rem;
+        text-align: center;
+        animation: slideIn 0.3s ease-out;
+        max-width: 560px;
+        width: min(100%, 560px);
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .result-panel.success {
+        background: rgba(34, 197, 94, 0.2);
+        border: 2px solid #22c55e;
+      }
+
+      .result-panel.error {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.25rem;
+        text-align: left;
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.94), rgba(69, 10, 10, 0.9));
+        border: 2px solid rgba(248, 113, 113, 0.85);
+        box-shadow: 0 18px 45px rgba(127, 29, 29, 0.35);
+      }
+
+      .result-icon {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .error-icon {
+        flex: 0 0 56px;
+        width: 56px;
+        height: 56px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        background: #fef2f2;
+        color: #991b1b;
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+        margin: 0;
+      }
+
+      .result-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+      }
+
+      .result-eyebrow {
+        color: #fecaca;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .result-panel.error h2 {
+        margin: 0;
+        font-size: 1.45rem;
+        line-height: 1.15;
+      }
+
+      .error-message {
+        margin: 0;
+        color: #fff7ed;
+        font-size: 1.05rem;
+        line-height: 1.45;
+      }
+
+      .error-help {
+        margin: 0.35rem 0 0;
+        color: #fed7aa;
+        font-size: 0.95rem;
+        line-height: 1.35;
+      }
+
+      .employee-name {
+        font-size: 1.5rem;
+        font-weight: 600;
+      }
+
+      .check-time {
+        font-size: 1.2rem;
+        opacity: 0.9;
+      }
+
+      .confidence {
+        font-size: 0.9rem;
+        opacity: 0.7;
+      }
+
+      .geo-info {
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.25rem;
+      }
+
+      .geo-info.valid {
+        background: rgba(34, 197, 94, 0.2);
+        color: #86efac;
+      }
+
+      .geo-info.invalid {
+        background: rgba(239, 68, 68, 0.2);
+        color: #fca5a5;
+      }
+
+      .mode-selector {
+        display: flex;
+        gap: 1rem;
+      }
+
+      .mode-btn {
+        /* Touch target: min 44x44px for tablets */
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+        font-weight: 500;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 0.5rem;
+        background: transparent;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .mode-btn:hover {
+        border-color: rgba(255, 255, 255, 0.5);
+      }
+
+      .mode-btn.active {
+        background: #3b82f6;
+        border-color: #3b82f6;
+      }
+
+      .instructions {
+        text-align: center;
+      }
+
+      .instructions p {
+        margin-bottom: 1rem;
+        opacity: 0.8;
+      }
+
+      .scan-btn {
+        /* Touch target: min 44x44px for tablets */
+        min-height: 44px;
+        min-width: 44px;
+        padding: 1rem 3rem;
+        font-size: 1.2rem;
+        font-weight: 600;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+      }
+
+      .scan-btn:hover:not(:disabled) {
+        background: #2563eb;
+        transform: scale(1.02);
+      }
+
+      .scan-btn:active:not(:disabled) {
+        transform: scale(0.98);
+      }
+
+      .scan-btn:disabled {
+        background: rgba(59, 130, 246, 0.5);
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+
+      .button-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      .kiosk-footer {
+        padding: 1rem;
+        text-align: center;
+        background: rgba(0, 0, 0, 0.3);
+      }
+
+      .admin-link {
+        /* Touch target: min 44x44px via padding */
+        display: inline-block;
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.75rem 1rem;
+        color: rgba(255, 255, 255, 0.5);
+        text-decoration: none;
+        font-size: 0.9rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .admin-link:hover {
+        color: white;
+      }
+
+      /* PWA Install Prompt Styles */
       .install-prompt {
-        display: none !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        padding: 0.5rem;
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 0.5rem;
+        animation: slideUp 0.3s ease-out;
       }
-    }
 
-    /* Orientation warning overlay for tablets */
-    .orientation-warning-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(10, 14, 23, 0.98);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      backdrop-filter: blur(8px);
-    }
-
-    .orientation-warning-content {
-      text-align: center;
-      padding: 2rem;
-      max-width: 400px;
-    }
-
-    .rotate-icon {
-      font-size: 4rem;
-      margin-bottom: 1.5rem;
-      animation: rotateDevice 2s ease-in-out infinite;
-    }
-
-    @keyframes rotateDevice {
-      0%, 100% {
-        transform: rotate(0deg);
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
-      50% {
-        transform: rotate(90deg);
+
+      .install-btn {
+        /* Touch target: min 44x44px */
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.75rem 1.25rem;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
       }
-    }
 
-    .warning-title {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: white;
-    }
+      .install-btn:hover {
+        background: #2563eb;
+        transform: scale(1.02);
+      }
 
-    .warning-subtitle {
-      font-size: 1rem;
-      opacity: 0.7;
-      color: white;
-    }
+      .install-btn:active {
+        transform: scale(0.98);
+      }
 
-    /* Hide orientation warning on phones (max-width: 600px) */
-    @media (max-width: 600px) {
+      .install-icon {
+        font-size: 1.2rem;
+      }
+
+      .dismiss-btn {
+        /* Touch target: min 44x44px */
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.6);
+        border: none;
+        border-radius: 0.375rem;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .dismiss-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+      }
+
+      /* Hide install prompt in standalone mode (already installed) */
+      @media (display-mode: standalone) {
+        .install-prompt {
+          display: none !important;
+        }
+      }
+
+      /* Orientation warning overlay for tablets */
       .orientation-warning-overlay {
-        display: none !important;
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 14, 23, 0.98);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        backdrop-filter: blur(8px);
       }
-    }
 
-    /* Hide orientation warning on desktop (min-width: 1024px) */
-    @media (min-width: 1024px) {
-      .orientation-warning-overlay {
-        display: none !important;
+      .orientation-warning-content {
+        text-align: center;
+        padding: 2rem;
+        max-width: 400px;
       }
-    }
 
-    /* Location Picker Modal */
-    .location-modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      backdrop-filter: blur(4px);
-    }
+      .rotate-icon {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+        animation: rotateDevice 2s ease-in-out infinite;
+      }
 
-    .location-modal {
-      background: #1e2a3a;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 1rem;
-      padding: 2rem;
-      width: 90%;
-      max-width: 480px;
-      max-height: 80vh;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
+      @keyframes rotateDevice {
+        0%,
+        100% {
+          transform: rotate(0deg);
+        }
+        50% {
+          transform: rotate(90deg);
+        }
+      }
 
-    .location-modal-title {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: white;
-      margin: 0;
-    }
+      .warning-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: white;
+      }
 
-    .location-modal-subtitle {
-      font-size: 0.875rem;
-      color: rgba(255, 255, 255, 0.6);
-      margin: 0;
-    }
+      .warning-subtitle {
+        font-size: 1rem;
+        opacity: 0.7;
+        color: white;
+      }
 
-    .location-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
+      /* Hide orientation warning on phones (max-width: 600px) */
+      @media (max-width: 600px) {
+        .orientation-warning-overlay {
+          display: none !important;
+        }
+      }
 
-    .location-item {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.875rem 1rem;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 0.5rem;
-      color: white;
-      cursor: pointer;
-      text-align: left;
-      transition: all 0.2s;
-      font-family: inherit;
-    }
+      /* Hide orientation warning on desktop (min-width: 1024px) */
+      @media (min-width: 1024px) {
+        .orientation-warning-overlay {
+          display: none !important;
+        }
+      }
 
-    .location-item:hover {
-      background: rgba(59, 130, 246, 0.2);
-      border-color: rgba(59, 130, 246, 0.4);
-    }
+      /* Location Picker Modal */
+      .location-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        backdrop-filter: blur(4px);
+      }
 
-    .location-item.selected {
-      background: rgba(34, 197, 94, 0.2);
-      border-color: rgba(34, 197, 94, 0.4);
-    }
+      .location-modal {
+        background: #1e2a3a;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1rem;
+        padding: 2rem;
+        width: 90%;
+        max-width: 480px;
+        max-height: 80vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
 
-    .location-name {
-      font-weight: 600;
-      font-size: 1rem;
-      flex: 1;
-    }
+      .location-modal-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: white;
+        margin: 0;
+      }
 
-    .location-address {
-      font-size: 0.8rem;
-      color: rgba(255, 255, 255, 0.5);
-    }
+      .location-modal-subtitle {
+        font-size: 0.875rem;
+        color: rgba(255, 255, 255, 0.6);
+        margin: 0;
+      }
 
-    .location-check {
-      color: #4ade80;
-      font-weight: 700;
-      font-size: 1.1rem;
-    }
+      .location-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
 
-    .location-empty {
-      color: rgba(255, 255, 255, 0.5);
-      text-align: center;
-      padding: 1rem;
-      margin: 0;
-    }
+      .location-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        color: white;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.2s;
+        font-family: inherit;
+      }
 
-    .location-clear-btn {
-      padding: 0.625rem 1rem;
-      background: rgba(239, 68, 68, 0.2);
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      border-radius: 0.5rem;
-      color: #fca5a5;
-      cursor: pointer;
-      font-size: 0.875rem;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
+      .location-item:hover {
+        background: rgba(59, 130, 246, 0.2);
+        border-color: rgba(59, 130, 246, 0.4);
+      }
 
-    .location-clear-btn:hover {
-      background: rgba(239, 68, 68, 0.35);
-    }
+      .location-item.selected {
+        background: rgba(34, 197, 94, 0.2);
+        border-color: rgba(34, 197, 94, 0.4);
+      }
 
-    .location-close-btn {
-      padding: 0.75rem;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 0.5rem;
-      color: white;
-      cursor: pointer;
-      font-size: 0.9rem;
-      font-family: inherit;
-      transition: background 0.2s;
-    }
+      .location-name {
+        font-weight: 600;
+        font-size: 1rem;
+        flex: 1;
+      }
 
-    .location-close-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-  `],
+      .location-address {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .location-check {
+        color: #4ade80;
+        font-weight: 700;
+        font-size: 1.1rem;
+      }
+
+      .location-empty {
+        color: rgba(255, 255, 255, 0.5);
+        text-align: center;
+        padding: 1rem;
+        margin: 0;
+      }
+
+      .location-clear-btn {
+        padding: 0.625rem 1rem;
+        background: rgba(239, 68, 68, 0.2);
+        border: 1px solid rgba(239, 68, 68, 0.4);
+        border-radius: 0.5rem;
+        color: #fca5a5;
+        cursor: pointer;
+        font-size: 0.875rem;
+        font-family: inherit;
+        transition: all 0.2s;
+      }
+
+      .location-clear-btn:hover {
+        background: rgba(239, 68, 68, 0.35);
+      }
+
+      .location-close-btn {
+        padding: 0.75rem;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 0.5rem;
+        color: white;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-family: inherit;
+        transition: background 0.2s;
+      }
+
+      .location-close-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    `,
+  ],
 })
 export class KioskComponent implements OnInit, OnDestroy {
   @ViewChild('videoElement') videoElement!: ElementRef<HTMLVideoElement>;
@@ -825,7 +913,9 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly mode = signal<KioskMode>('idle');
   readonly isCheckIn = signal(true);
   readonly lastRecord = signal<AttendanceRecord | null>(null);
+  readonly errorTitle = signal<string>('Intentá nuevamente');
   readonly errorMessage = signal<string>('');
+  readonly errorHelp = signal<string>('Acercate al kiosk y repetí el intento cuando estés listo.');
 
   readonly currentTime = signal(this.formatTime(new Date()));
   readonly currentDate = signal(this.formatDate(new Date()));
@@ -840,10 +930,10 @@ export class KioskComponent implements OnInit, OnDestroy {
 
   // Orientation handling for tablets: portrait orientation signal
   private readonly isPortrait = signal(false);
-  
+
   // Show warning when tablet is in portrait mode (landscape recommended)
-  readonly showOrientationWarning = computed(() => 
-    this.platformService.isTablet() && this.isPortrait()
+  readonly showOrientationWarning = computed(
+    () => this.platformService.isTablet() && this.isPortrait(),
   );
 
   // PWA install prompt handling for kiosk tablets
@@ -869,7 +959,9 @@ export class KioskComponent implements OnInit, OnDestroy {
         this.kioskLocation.set(location);
         if (this.currentPosition === null && this.geoStatus() !== 'success') {
           this.geoStatus.set('error');
-          this.geoError.set('GPS real no disponible. La sede configurada no reemplaza la ubicación del dispositivo.');
+          this.geoError.set(
+            'GPS real no disponible. La sede configurada no reemplaza la ubicación del dispositivo.',
+          );
         }
       },
       error: () => {
@@ -934,9 +1026,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     if (this.clockInterval) {
       clearInterval(this.clockInterval);
     }
-    if (this.resultTimeout) {
-      clearTimeout(this.resultTimeout);
-    }
+    this.clearResultTimeout();
     if (this.updateCheckInterval) {
       clearInterval(this.updateCheckInterval);
     }
@@ -973,7 +1063,11 @@ export class KioskComponent implements OnInit, OnDestroy {
     try {
       await this.cameraService.start(this.videoElement.nativeElement);
     } catch (error) {
-      this.errorMessage.set('No se pudo acceder a la cámara');
+      this.showError({
+        title: 'Cámara no disponible',
+        message: 'No se pudo acceder a la cámara.',
+        help: 'Verificá que el navegador tenga permiso para usar la cámara del kiosk.',
+      });
       this.mode.set('error');
     }
   }
@@ -983,22 +1077,30 @@ export class KioskComponent implements OnInit, OnDestroy {
   }
 
   async scan(): Promise<void> {
+    this.prepareForScan();
+
     // Capture frames first (camera doesn't depend on GPS)
     const images = await this.cameraService.captureFrames(3, 250);
 
     if (!images || images.length === 0) {
-      this.errorMessage.set('No se pudo capturar la imagen');
+      this.showError({
+        title: 'No se pudo capturar el rostro',
+        message: 'No se pudo capturar una imagen válida.',
+        help: 'Asegurate de estar frente a la cámara y con buena iluminación.',
+      });
       this.mode.set('error');
       this.resetAfterDelay();
       return;
     }
 
-    this.mode.set('scanning');
-
     // Client-side liveness check: detect static photos before sending to server
     const livenessResult = await this.livenessService.analyzeLiveness(images);
     if (!livenessResult.isLive) {
-      this.errorMessage.set('Se detectó una imagen estática. Por favor usá tu rostro real frente a la cámara.');
+      this.showError({
+        title: 'Rostro real requerido',
+        message: 'Se detectó una imagen estática. Por favor usá tu rostro real frente a la cámara.',
+        help: 'No uses fotos, pantallas ni impresiones. Mirá directo a la cámara del kiosk.',
+      });
       this.mode.set('error');
       this.resetAfterDelay();
       return;
@@ -1026,7 +1128,12 @@ export class KioskComponent implements OnInit, OnDestroy {
       if (!this.currentPosition) {
         this.geoStatus.set('error');
         this.geoError.set('No se pudo obtener la ubicación GPS real del dispositivo.');
-        this.errorMessage.set('Se requiere GPS real para marcar asistencia. Verificá los permisos de ubicación.');
+        this.showError({
+          title: 'Ubicación requerida',
+          message:
+            'Se requiere GPS real para marcar asistencia. Verificá los permisos de ubicación.',
+          help: 'Activá la ubicación del dispositivo y permití el acceso desde el navegador.',
+        });
         this.mode.set('error');
         this.resetAfterDelay();
         return;
@@ -1052,23 +1159,109 @@ export class KioskComponent implements OnInit, OnDestroy {
         this.resetAfterDelay();
       },
       error: (error) => {
-        this.errorMessage.set(
-          error.error?.detail || 'Error al procesar la solicitud'
-        );
+        this.showError(this.toKioskErrorContent(error?.error?.detail));
         this.mode.set('error');
         this.resetAfterDelay();
       },
     });
   }
 
+  private prepareForScan(): void {
+    this.clearResultTimeout();
+    this.lastRecord.set(null);
+    this.errorTitle.set('Intentá nuevamente');
+    this.errorMessage.set('');
+    this.errorHelp.set('Acercate al kiosk y repetí el intento cuando estés listo.');
+    this.mode.set('scanning');
+  }
+
+  private showError(content: KioskErrorContent): void {
+    this.errorTitle.set(content.title);
+    this.errorMessage.set(content.message);
+    this.errorHelp.set(content.help);
+  }
+
+  private toKioskErrorContent(detail: unknown): KioskErrorContent {
+    const rawDetail = typeof detail === 'string' ? detail : '';
+    const normalizedDetail = rawDetail.toLowerCase();
+    const distanceMatch = rawDetail.match(/:\s*(\d+(?:\.\d+)?)\s*m/i);
+
+    if (normalizedDetail.includes('outside permitted area')) {
+      const distance = distanceMatch ? `${Math.round(Number(distanceMatch[1]))} m` : null;
+      return {
+        title: 'Fuera del área permitida',
+        message: distance
+          ? `Estás fuera del área permitida para marcar asistencia. Distancia detectada: ${distance}.`
+          : 'Estás fuera del área permitida para marcar asistencia.',
+        help: 'Acercate a la sede asignada y volvé a intentarlo.',
+      };
+    }
+
+    if (normalizedDetail.includes('gps coordinates are required')) {
+      return {
+        title: 'Ubicación requerida',
+        message: 'Se requiere GPS real para validar el marcaje de asistencia.',
+        help: 'Activá la ubicación del dispositivo y permití el acceso desde el navegador.',
+      };
+    }
+
+    if (
+      normalizedDetail.includes('liveness check failed') ||
+      normalizedDetail.includes('static image')
+    ) {
+      return {
+        title: 'Rostro real requerido',
+        message: 'Se detectó una imagen estática. Por favor usá tu rostro real frente a la cámara.',
+        help: 'No uses fotos, pantallas ni impresiones. Mirá directo a la cámara del kiosk.',
+      };
+    }
+
+    if (normalizedDetail.includes('no matching employee found')) {
+      return {
+        title: 'Empleado no reconocido',
+        message: 'No encontramos un empleado registrado que coincida con este rostro.',
+        help: 'Verificá que el empleado tenga rostro registrado o contactá a administración.',
+      };
+    }
+
+    if (normalizedDetail.includes('no face detected')) {
+      return {
+        title: 'Rostro no detectado',
+        message: 'No se detectó un rostro en la imagen capturada.',
+        help: 'Centrate en el marco, evitá contraluces y volvé a intentarlo.',
+      };
+    }
+
+    if (normalizedDetail.includes('error processing image')) {
+      return {
+        title: 'Imagen no procesable',
+        message: 'No pudimos procesar la imagen capturada.',
+        help: 'Volvé a intentarlo con mejor iluminación y el rostro centrado.',
+      };
+    }
+
+    return {
+      title: 'No se pudo completar el marcaje',
+      message: rawDetail || 'Error al procesar la solicitud.',
+      help: 'Intentá nuevamente. Si el problema continúa, avisá a administración.',
+    };
+  }
+
   private resetAfterDelay(): void {
+    this.clearResultTimeout();
     this.resultTimeout = setTimeout(() => {
       this.mode.set('idle');
       this.lastRecord.set(null);
       this.errorMessage.set('');
-    }, 5000);
+    }, KIOSK_RESULT_RESET_DELAY_MS);
   }
 
+  private clearResultTimeout(): void {
+    if (this.resultTimeout) {
+      clearTimeout(this.resultTimeout);
+      this.resultTimeout = undefined;
+    }
+  }
 
   /**
    * Setup service worker update strategy for 24/7 kiosk mode.
@@ -1095,9 +1288,7 @@ export class KioskComponent implements OnInit, OnDestroy {
 
     // Listen for available updates
     this.swUpdate.versionUpdates
-      .pipe(
-        filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY')
-      )
+      .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
       .subscribe(() => {
         this.hasUpdateAvailable = true;
         this.attemptUpdateReload();
@@ -1168,7 +1359,7 @@ export class KioskComponent implements OnInit, OnDestroy {
   private setupOrientationListener(): void {
     // Only set up listener for tablets (determined by PlatformService)
     const isTablet = this.platformService.isTablet();
-    
+
     if (!isTablet) {
       // Skip orientation handling on phones and desktop
       return;
@@ -1176,13 +1367,13 @@ export class KioskComponent implements OnInit, OnDestroy {
 
     // Create MediaQueryList for orientation detection
     this.orientationMediaQuery = window.matchMedia('(orientation: portrait)');
-    
+
     // Initial check
     this.updateOrientationState();
-    
+
     // Create handler function
     this.orientationChangeHandler = () => this.updateOrientationState();
-    
+
     // Add listener for orientation changes
     this.orientationMediaQuery.addEventListener('change', this.orientationChangeHandler);
   }
@@ -1197,7 +1388,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     }
 
     const isPortraitMode = this.orientationMediaQuery.matches;
-    
+
     // Update portrait signal (showOrientationWarning is computed from this)
     this.isPortrait.set(isPortraitMode);
   }
@@ -1218,10 +1409,10 @@ export class KioskComponent implements OnInit, OnDestroy {
    */
   private setupPWAInstallPrompt(): void {
     // Check if already installed (standalone mode)
-    const isStandalone = 
+    const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true;
-    
+
     this.isStandalone.set(isStandalone);
 
     // If already installed, no need to show install button

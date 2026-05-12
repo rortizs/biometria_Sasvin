@@ -49,10 +49,8 @@ export interface ScheduleAssignmentCreate {
 
 export interface BulkScheduleAssignment {
   employee_ids: string[];
-  schedule_pattern_id?: string;
-  start_date: string;
-  end_date: string;
-  days_of_week?: number[]; // 0=Monday, 6=Sunday
+  dates: string[];
+  schedule_id?: string;
   is_day_off?: boolean;
 }
 
