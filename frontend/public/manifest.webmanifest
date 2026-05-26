@@ -1,6 +1,6 @@
 {
-  "name": "Sasvin Biometrico",
-  "short_name": "Sasvin",
+  "name": "Sistema Biometrico",
+  "short_name": "Sistema Biometrico",
   "start_url": "/kiosk",
   "display": "standalone",
   "background_color": "#0a0e17",

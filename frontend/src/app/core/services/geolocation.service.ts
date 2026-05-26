@@ -200,7 +200,7 @@ export class GeolocationService {
       return new GeoError(
         'PERMISSION_DENIED',
         GEO_ERROR_MESSAGES.PERMISSION_DENIED,
-        'Abrí Configuración > Aplicaciones > Sasvin > Permisos para habilitar la ubicación'
+        'Abrí Configuración > Aplicaciones > Sistema Biometrico > Permisos para habilitar la ubicación'
       );
     }
     
