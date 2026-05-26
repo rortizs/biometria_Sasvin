@@ -288,7 +288,7 @@ describe('GeolocationService', () => {
         fail('Should have thrown');
       } catch (error) {
         expect((error as GeoError).code).toBe('PERMISSION_DENIED');
-        expect((error as GeoError).hint).toContain('Configuración > Aplicaciones > Sasvin');
+        expect((error as GeoError).hint).toContain('Configuración > Aplicaciones > Sistema Biometrico');
         expect(service.state()).toBe('error');
       }
     });

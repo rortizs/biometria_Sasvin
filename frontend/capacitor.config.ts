@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.sasvin.biometria',
-  appName: 'Sasvin Biometrico',
+  appName: 'Sistema Biometrico',
   webDir: 'dist/frontend/browser',
   server: {
     // Beta: Remote URL — native app loads web from production server
