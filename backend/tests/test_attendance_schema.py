@@ -25,18 +25,19 @@ class TestAttendanceCheckInSchema:
         assert schema.latitude == -34.603722
         assert schema.longitude == -58.381592
 
-    def test_valid_schema_with_single_image(self):
-        """Should accept single image in array."""
+    def test_reject_single_image_array(self):
+        """Should reject fewer than 3 images required for liveness."""
         data = {
             "images": ["base64image1"],
             "latitude": -34.603722,
             "longitude": -58.381592,
         }
 
-        schema = AttendanceCheckIn(**data)
+        with pytest.raises(ValidationError) as exc_info:
+            AttendanceCheckIn(**data)
 
-        assert len(schema.images) == 1
-        assert schema.images[0] == "base64image1"
+        errors = exc_info.value.errors()
+        assert any(e["type"] == "too_short" for e in errors)
 
     def test_valid_schema_with_max_images(self):
         """Should accept up to 5 images."""
@@ -48,34 +49,35 @@ class TestAttendanceCheckInSchema:
 
         assert len(schema.images) == 5
 
-    def test_backward_compat_single_image_field(self):
-        """Should convert deprecated 'image' field to 'images' array."""
+    def test_deprecated_single_image_field_is_invalid_for_liveness(self):
+        """Deprecated single image alias should fail the 3-image liveness contract."""
         data = {
-            "image": "base64image1",  # Old API
+            "image": "base64image1",
             "latitude": -34.603722,
             "longitude": -58.381592,
         }
 
-        schema = AttendanceCheckIn(**data)
+        with pytest.raises(ValidationError) as exc_info:
+            AttendanceCheckIn(**data)
 
-        assert len(schema.images) == 1
-        assert schema.images[0] == "base64image1"
+        errors = exc_info.value.errors()
+        assert any(e["type"] == "too_short" for e in errors)
 
     def test_images_takes_precedence_over_image(self):
         """If both provided, images should take precedence."""
         data = {
             "image": "old_image",
-            "images": ["new_image1", "new_image2"],
+            "images": ["new_image1", "new_image2", "new_image3"],
         }
 
         schema = AttendanceCheckIn(**data)
 
-        assert len(schema.images) == 2
+        assert len(schema.images) == 3
         assert schema.images[0] == "new_image1"
         assert schema.images[1] == "new_image2"
 
     def test_reject_empty_images_array(self):
-        """Should reject empty images array (min_length=1)."""
+        """Should reject empty images array (min_length=3)."""
         data = {
             "images": [],
         }
@@ -114,7 +116,7 @@ class TestAttendanceCheckInSchema:
     def test_optional_gps_coordinates(self):
         """GPS coordinates should be optional."""
         data = {
-            "images": ["base64image1"],
+            "images": ["base64image1", "base64image2", "base64image3"],
         }
 
         schema = AttendanceCheckIn(**data)
@@ -125,7 +127,7 @@ class TestAttendanceCheckInSchema:
     def test_valid_latitude_range(self):
         """Should accept valid latitude (-90 to 90)."""
         data = {
-            "images": ["img"],
+            "images": ["img1", "img2", "img3"],
             "latitude": -90,
             "longitude": 0,
         }
@@ -139,7 +141,7 @@ class TestAttendanceCheckInSchema:
     def test_reject_invalid_latitude(self):
         """Should reject latitude outside -90 to 90."""
         data = {
-            "images": ["img"],
+            "images": ["img1", "img2", "img3"],
             "latitude": -91,
             "longitude": 0,
         }
@@ -157,7 +159,7 @@ class TestAttendanceCheckInSchema:
     def test_valid_longitude_range(self):
         """Should accept valid longitude (-180 to 180)."""
         data = {
-            "images": ["img"],
+            "images": ["img1", "img2", "img3"],
             "latitude": 0,
             "longitude": -180,
         }
@@ -171,7 +173,7 @@ class TestAttendanceCheckInSchema:
     def test_reject_invalid_longitude(self):
         """Should reject longitude outside -180 to 180."""
         data = {
-            "images": ["img"],
+            "images": ["img1", "img2", "img3"],
             "latitude": 0,
             "longitude": -181,
         }
@@ -189,7 +191,7 @@ class TestAttendanceCheckInSchema:
     def test_optional_device_id(self):
         """Device ID should be optional."""
         data = {
-            "images": ["img"],
+            "images": ["img1", "img2", "img3"],
         }
 
         schema = AttendanceCheckIn(**data)
@@ -213,16 +215,17 @@ class TestAttendanceCheckOutSchema:
         assert len(schema.images) == 3
         assert schema.images[0] == "base64image1"
 
-    def test_backward_compat_single_image_field(self):
-        """Should convert deprecated 'image' field to 'images' array."""
+    def test_deprecated_single_image_field_is_invalid_for_liveness(self):
+        """Deprecated single image alias should fail the 3-image liveness contract."""
         data = {
             "image": "base64image1",
         }
 
-        schema = AttendanceCheckOut(**data)
+        with pytest.raises(ValidationError) as exc_info:
+            AttendanceCheckOut(**data)
 
-        assert len(schema.images) == 1
-        assert schema.images[0] == "base64image1"
+        errors = exc_info.value.errors()
+        assert any(e["type"] == "too_short" for e in errors)
 
     def test_reject_empty_images_array(self):
         """Should reject empty images array."""

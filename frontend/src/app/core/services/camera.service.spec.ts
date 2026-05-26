@@ -1,14 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 import { CameraService } from './camera.service';
 import { PlatformService } from './platform.service';
-import { Capacitor } from '@capacitor/core';
-import { App } from '@capacitor/app';
 
 describe('CameraService', () => {
   let service: CameraService;
   let platformService: jasmine.SpyObj<PlatformService>;
   let mockVideoElement: HTMLVideoElement;
-  let mockMediaStream: jasmine.SpyObj<MediaStream>;
+  let mockMediaStream: MediaStream;
+  let mockTrack: jasmine.SpyObj<MediaStreamTrack>;
 
   beforeEach(() => {
     // Mock PlatformService
@@ -30,10 +29,10 @@ describe('CameraService', () => {
     mockVideoElement = document.createElement('video');
     spyOn(mockVideoElement, 'play').and.returnValue(Promise.resolve());
 
-    // Create mock MediaStream
-    const mockTrack = jasmine.createSpyObj('MediaStreamTrack', ['stop']);
-    mockMediaStream = jasmine.createSpyObj('MediaStream', ['getTracks']);
-    mockMediaStream.getTracks.and.returnValue([mockTrack]);
+    // Create a MediaStream-compatible object accepted by HTMLVideoElement.srcObject.
+    mockTrack = jasmine.createSpyObj('MediaStreamTrack', ['stop']);
+    mockMediaStream = new MediaStream();
+    spyOn(mockMediaStream, 'getTracks').and.returnValue([mockTrack]);
   });
 
   afterEach(() => {
@@ -106,11 +105,12 @@ describe('CameraService', () => {
     it('should setup Capacitor app state listener on native', async () => {
       platformService.isNative.and.returnValue(true);
       const mockListener = { remove: jasmine.createSpy('remove') };
-      spyOn(App, 'addListener').and.returnValue(Promise.resolve(mockListener as any));
+      const addListenerSpy = jasmine.createSpy('addListener').and.returnValue(mockListener);
+      (service as any).app = { addListener: addListenerSpy };
 
       await service.start(mockVideoElement);
 
-      expect(App.addListener).toHaveBeenCalledWith(
+      expect(addListenerSpy).toHaveBeenCalledWith(
         'appStateChange' as any,
         jasmine.any(Function)
       );
@@ -146,7 +146,7 @@ describe('CameraService', () => {
       overconstrainedError.name = 'OverconstrainedError';
 
       let callCount = 0;
-      spyOn(navigator.mediaDevices, 'getUserMedia').and.callFake((constraints: any) => {
+      spyOn(navigator.mediaDevices, 'getUserMedia').and.callFake(() => {
         callCount++;
         if (callCount <= 3) {
           // Fail all constrained resolutions
@@ -326,9 +326,11 @@ describe('CameraService', () => {
 
       const capturePromise = service.captureFrames(3, 250);
 
-      // Fast-forward through delays
+      // Fast-forward through delays, yielding between ticks so async awaits resume.
       jasmine.clock().tick(250);
+      await Promise.resolve();
       jasmine.clock().tick(250);
+      await Promise.resolve();
 
       const frames = await capturePromise;
 
@@ -347,6 +349,7 @@ describe('CameraService', () => {
       expect(service.capturing()).toBe(true);
 
       jasmine.clock().tick(100);
+      await Promise.resolve();
 
       await capturePromise;
 
@@ -367,7 +370,10 @@ describe('CameraService', () => {
       const secondFrames = await secondCapture;
       expect(secondFrames.length).toBe(0);
 
-      jasmine.clock().tick(500);
+      jasmine.clock().tick(250);
+      await Promise.resolve();
+      jasmine.clock().tick(250);
+      await Promise.resolve();
 
       const firstFrames = await firstCapture;
       expect(firstFrames.length).toBe(3);
@@ -381,7 +387,10 @@ describe('CameraService', () => {
 
       const capturePromise = service.captureFrames();
 
-      jasmine.clock().tick(500);
+      jasmine.clock().tick(250);
+      await Promise.resolve();
+      jasmine.clock().tick(250);
+      await Promise.resolve();
 
       const frames = await capturePromise;
 
@@ -390,10 +399,14 @@ describe('CameraService', () => {
   });
 
   describe('visibility handling', () => {
+    let visibilityState: DocumentVisibilityState;
+
     beforeEach(() => {
       spyOn(navigator.mediaDevices, 'getUserMedia').and.returnValue(
         Promise.resolve(mockMediaStream)
       );
+      visibilityState = 'visible';
+      spyOnProperty(document, 'visibilityState', 'get').and.callFake(() => visibilityState);
     });
 
     it('should pause camera when page becomes hidden', async () => {
@@ -401,11 +414,7 @@ describe('CameraService', () => {
       expect(service.active()).toBe(true);
 
       // Simulate visibility change to hidden
-      Object.defineProperty(document, 'visibilityState', {
-        writable: true,
-        configurable: true,
-        value: 'hidden',
-      });
+      visibilityState = 'hidden';
       document.dispatchEvent(new Event('visibilitychange'));
 
       expect(service.active()).toBe(false);
@@ -415,13 +424,13 @@ describe('CameraService', () => {
       await service.start(mockVideoElement);
 
       // Hide
-      Object.defineProperty(document, 'visibilityState', { value: 'hidden', writable: true });
+      visibilityState = 'hidden';
       document.dispatchEvent(new Event('visibilitychange'));
 
       expect(service.active()).toBe(false);
 
       // Show
-      Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true });
+      visibilityState = 'visible';
 
       // Mock getUserMedia for resume
       (navigator.mediaDevices.getUserMedia as jasmine.Spy).and.returnValue(

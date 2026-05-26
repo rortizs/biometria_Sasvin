@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { GeolocationService } from './geolocation.service';
 import { PlatformService } from './platform.service';
-import { Geolocation } from '@capacitor/geolocation';
+import type { GeolocationPlugin } from '@capacitor/geolocation';
 import { firstValueFrom } from 'rxjs';
 import { GeoError } from '../models/geolocation.model';
 
@@ -26,8 +26,28 @@ function createMockPosition(lat: number, lon: number, accuracy: number): Geoloca
 describe('GeolocationService', () => {
   let service: GeolocationService;
   let platformService: jasmine.SpyObj<PlatformService>;
+  let originalGeolocationDescriptor: PropertyDescriptor | undefined;
+  let originalPermissionsDescriptor: PropertyDescriptor | undefined;
+
+  function setNavigatorProperty<K extends 'geolocation' | 'permissions'>(
+    property: K,
+    value: Navigator[K]
+  ): void {
+    Object.defineProperty(navigator, property, {
+      configurable: true,
+      get: () => value,
+    });
+  }
+
+  function setNativeGeolocation(overrides: Partial<GeolocationPlugin>): void {
+    (service as any).geolocation = overrides;
+  }
 
   beforeEach(() => {
+    originalGeolocationDescriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'geolocation')
+      ?? Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+    originalPermissionsDescriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'permissions')
+      ?? Object.getOwnPropertyDescriptor(navigator, 'permissions');
     const platformSpy = jasmine.createSpyObj('PlatformService', ['isNative']);
     platformSpy.isNative.and.returnValue(false);
 
@@ -42,6 +62,15 @@ describe('GeolocationService', () => {
     platformService = TestBed.inject(PlatformService) as jasmine.SpyObj<PlatformService>;
   });
 
+  afterEach(() => {
+    if (originalGeolocationDescriptor) {
+      Object.defineProperty(navigator, 'geolocation', originalGeolocationDescriptor);
+    }
+    if (originalPermissionsDescriptor) {
+      Object.defineProperty(navigator, 'permissions', originalPermissionsDescriptor);
+    }
+  });
+
   describe('isSupported', () => {
     it('should return true on native platforms', () => {
       platformService.isNative.and.returnValue(true);
@@ -51,28 +80,28 @@ describe('GeolocationService', () => {
 
     it('should return true if browser has geolocation', () => {
       platformService.isNative.and.returnValue(false);
-      spyOnProperty(navigator, 'geolocation', 'get').and.returnValue({} as any);
+      setNavigatorProperty('geolocation', {} as any);
 
       expect(service.isSupported()).toBe(true);
     });
 
     it('should return false if browser lacks geolocation', () => {
       platformService.isNative.and.returnValue(false);
-      spyOnProperty(navigator, 'geolocation', 'get').and.returnValue(undefined as any);
+      setNavigatorProperty('geolocation', undefined as any);
 
       expect(service.isSupported()).toBe(false);
     });
   });
 
   describe('getCurrentPosition - browser', () => {
-    let mockGeolocation: jasmine.SpyObj<Geolocation>;
+    let mockGeolocation: jasmine.SpyObj<GeolocationPositionError> & { getCurrentPosition: jasmine.Spy };
 
     beforeEach(() => {
       platformService.isNative.and.returnValue(false);
       
       mockGeolocation = jasmine.createSpyObj('Geolocation', ['getCurrentPosition']);
       
-      spyOnProperty(navigator, 'geolocation', 'get').and.returnValue(mockGeolocation as any);
+      setNavigatorProperty('geolocation', mockGeolocation as any);
     });
 
     it('should get position from browser geolocation API', async () => {
@@ -185,7 +214,7 @@ describe('GeolocationService', () => {
     });
 
     it('should reject if geolocation is not supported', async () => {
-      spyOnProperty(navigator, 'geolocation', 'get').and.returnValue(undefined as any);
+      setNavigatorProperty('geolocation', undefined as any);
 
       try {
         await firstValueFrom(service.getCurrentPosition());
@@ -227,11 +256,14 @@ describe('GeolocationService', () => {
         timestamp: Date.now(),
       };
 
-      spyOn(Geolocation, 'getCurrentPosition').and.returnValue(Promise.resolve(mockPosition));
+      const getCurrentPositionSpy = jasmine
+        .createSpy('getCurrentPosition')
+        .and.returnValue(Promise.resolve(mockPosition));
+      setNativeGeolocation({ getCurrentPosition: getCurrentPositionSpy as any });
 
       const position = await firstValueFrom(service.getCurrentPosition());
 
-      expect(Geolocation.getCurrentPosition).toHaveBeenCalledWith({
+      expect(getCurrentPositionSpy).toHaveBeenCalledWith({
         enableHighAccuracy: true,
         timeout: 15000,
         maximumAge: 10000, // MOBILE config
@@ -245,7 +277,11 @@ describe('GeolocationService', () => {
     it('should handle native permission error', async () => {
       const permissionError = new Error('Permission denied by user');
 
-      spyOn(Geolocation, 'getCurrentPosition').and.returnValue(Promise.reject(permissionError));
+      setNativeGeolocation({
+        getCurrentPosition: jasmine
+          .createSpy('getCurrentPosition')
+          .and.returnValue(Promise.reject(permissionError)) as any,
+      });
 
       try {
         await firstValueFrom(service.getCurrentPosition());
@@ -260,7 +296,11 @@ describe('GeolocationService', () => {
     it('should handle native timeout error', async () => {
       const timeoutError = new Error('Geolocation request timed out');
 
-      spyOn(Geolocation, 'getCurrentPosition').and.returnValue(Promise.reject(timeoutError));
+      setNativeGeolocation({
+        getCurrentPosition: jasmine
+          .createSpy('getCurrentPosition')
+          .and.returnValue(Promise.reject(timeoutError)) as any,
+      });
 
       try {
         await firstValueFrom(service.getCurrentPosition());
@@ -274,7 +314,11 @@ describe('GeolocationService', () => {
     it('should handle generic native errors as POSITION_UNAVAILABLE', async () => {
       const genericError = new Error('Something went wrong');
 
-      spyOn(Geolocation, 'getCurrentPosition').and.returnValue(Promise.reject(genericError));
+      setNativeGeolocation({
+        getCurrentPosition: jasmine
+          .createSpy('getCurrentPosition')
+          .and.returnValue(Promise.reject(genericError)) as any,
+      });
 
       try {
         await firstValueFrom(service.getCurrentPosition());
@@ -294,9 +338,11 @@ describe('GeolocationService', () => {
     it('should return granted if permission is granted', async () => {
       const mockPermissionStatus = { state: 'granted' };
       
-      spyOn(navigator.permissions, 'query').and.returnValue(
-        Promise.resolve(mockPermissionStatus as PermissionStatus)
-      );
+      setNavigatorProperty('permissions', {
+        query: jasmine.createSpy('query').and.returnValue(
+          Promise.resolve(mockPermissionStatus as PermissionStatus)
+        ),
+      } as any);
 
       const permission = await firstValueFrom(service.checkPermission());
 
@@ -306,9 +352,11 @@ describe('GeolocationService', () => {
     it('should return denied if permission is denied', async () => {
       const mockPermissionStatus = { state: 'denied' };
       
-      spyOn(navigator.permissions, 'query').and.returnValue(
-        Promise.resolve(mockPermissionStatus as PermissionStatus)
-      );
+      setNavigatorProperty('permissions', {
+        query: jasmine.createSpy('query').and.returnValue(
+          Promise.resolve(mockPermissionStatus as PermissionStatus)
+        ),
+      } as any);
 
       const permission = await firstValueFrom(service.checkPermission());
 
@@ -318,9 +366,11 @@ describe('GeolocationService', () => {
     it('should return prompt if permission is prompt', async () => {
       const mockPermissionStatus = { state: 'prompt' };
       
-      spyOn(navigator.permissions, 'query').and.returnValue(
-        Promise.resolve(mockPermissionStatus as PermissionStatus)
-      );
+      setNavigatorProperty('permissions', {
+        query: jasmine.createSpy('query').and.returnValue(
+          Promise.resolve(mockPermissionStatus as PermissionStatus)
+        ),
+      } as any);
 
       const permission = await firstValueFrom(service.checkPermission());
 
@@ -328,23 +378,11 @@ describe('GeolocationService', () => {
     });
 
     it('should return prompt if permissions API is not available', async () => {
-      const originalPermissions = navigator.permissions;
-      Object.defineProperty(navigator, 'permissions', {
-        value: undefined,
-        writable: true,
-        configurable: true,
-      });
+      setNavigatorProperty('permissions', undefined as any);
 
       const permission = await firstValueFrom(service.checkPermission());
 
       expect(permission).toBe('prompt');
-
-      // Restore
-      Object.defineProperty(navigator, 'permissions', {
-        value: originalPermissions,
-        writable: true,
-        configurable: true,
-      });
     });
   });
 
@@ -354,9 +392,11 @@ describe('GeolocationService', () => {
     });
 
     it('should check Capacitor permissions', async () => {
-      spyOn(Geolocation, 'checkPermissions').and.returnValue(
-        Promise.resolve({ location: 'granted', coarseLocation: 'granted' })
-      );
+      setNativeGeolocation({
+        checkPermissions: jasmine.createSpy('checkPermissions').and.returnValue(
+          Promise.resolve({ location: 'granted', coarseLocation: 'granted' })
+        ) as any,
+      });
 
       const permission = await firstValueFrom(service.checkPermission());
 
@@ -364,9 +404,11 @@ describe('GeolocationService', () => {
     });
 
     it('should handle denied permission', async () => {
-      spyOn(Geolocation, 'checkPermissions').and.returnValue(
-        Promise.resolve({ location: 'denied', coarseLocation: 'denied' })
-      );
+      setNativeGeolocation({
+        checkPermissions: jasmine.createSpy('checkPermissions').and.returnValue(
+          Promise.resolve({ location: 'denied', coarseLocation: 'denied' })
+        ) as any,
+      });
 
       const permission = await firstValueFrom(service.checkPermission());
 
@@ -374,9 +416,11 @@ describe('GeolocationService', () => {
     });
 
     it('should handle prompt permission', async () => {
-      spyOn(Geolocation, 'checkPermissions').and.returnValue(
-        Promise.resolve({ location: 'prompt', coarseLocation: 'prompt' })
-      );
+      setNativeGeolocation({
+        checkPermissions: jasmine.createSpy('checkPermissions').and.returnValue(
+          Promise.resolve({ location: 'prompt', coarseLocation: 'prompt' })
+        ) as any,
+      });
 
       const permission = await firstValueFrom(service.checkPermission());
 
@@ -384,9 +428,11 @@ describe('GeolocationService', () => {
     });
 
     it('should handle check failure by returning prompt', async () => {
-      spyOn(Geolocation, 'checkPermissions').and.returnValue(
-        Promise.reject(new Error('Permission check failed'))
-      );
+      setNativeGeolocation({
+        checkPermissions: jasmine.createSpy('checkPermissions').and.returnValue(
+          Promise.reject(new Error('Permission check failed'))
+        ) as any,
+      });
 
       const permission = await firstValueFrom(service.checkPermission());
 
@@ -400,9 +446,11 @@ describe('GeolocationService', () => {
     });
 
     it('should request Capacitor permissions', async () => {
-      spyOn(Geolocation, 'requestPermissions').and.returnValue(
-        Promise.resolve({ location: 'granted', coarseLocation: 'granted' })
-      );
+      setNativeGeolocation({
+        requestPermissions: jasmine.createSpy('requestPermissions').and.returnValue(
+          Promise.resolve({ location: 'granted', coarseLocation: 'granted' })
+        ) as any,
+      });
 
       const permission = await firstValueFrom(service.requestPermission());
 
@@ -410,9 +458,11 @@ describe('GeolocationService', () => {
     });
 
     it('should return denied if request is denied', async () => {
-      spyOn(Geolocation, 'requestPermissions').and.returnValue(
-        Promise.resolve({ location: 'denied', coarseLocation: 'denied' })
-      );
+      setNativeGeolocation({
+        requestPermissions: jasmine.createSpy('requestPermissions').and.returnValue(
+          Promise.resolve({ location: 'denied', coarseLocation: 'denied' })
+        ) as any,
+      });
 
       const permission = await firstValueFrom(service.requestPermission());
 
@@ -428,9 +478,11 @@ describe('GeolocationService', () => {
     it('should check current permission state (browser does not have explicit request)', async () => {
       const mockPermissionStatus = { state: 'granted' };
       
-      spyOn(navigator.permissions, 'query').and.returnValue(
-        Promise.resolve(mockPermissionStatus as PermissionStatus)
-      );
+      setNavigatorProperty('permissions', {
+        query: jasmine.createSpy('query').and.returnValue(
+          Promise.resolve(mockPermissionStatus as PermissionStatus)
+        ),
+      } as any);
 
       const permission = await firstValueFrom(service.requestPermission());
 
@@ -449,7 +501,7 @@ describe('GeolocationService', () => {
         success(mockPosition);
       });
       
-      spyOnProperty(navigator, 'geolocation', 'get').and.returnValue(mockGeolocation as any);
+      setNavigatorProperty('geolocation', mockGeolocation as any);
 
       expect(service.state()).toBe('idle');
 
@@ -474,7 +526,7 @@ describe('GeolocationService', () => {
         error(positionError);
       });
       
-      spyOnProperty(navigator, 'geolocation', 'get').and.returnValue(mockGeolocation as any);
+      setNavigatorProperty('geolocation', mockGeolocation as any);
 
       expect(service.lastError()).toBeNull();
 
@@ -498,7 +550,7 @@ describe('GeolocationService', () => {
         success(mockPosition);
       });
       
-      spyOnProperty(navigator, 'geolocation', 'get').and.returnValue(mockGeolocation as any);
+      setNavigatorProperty('geolocation', mockGeolocation as any);
 
       // Manually set an error first
       service['_lastError'].set(new GeoError('TIMEOUT', 'Test error'));

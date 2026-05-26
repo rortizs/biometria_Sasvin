@@ -30,6 +30,7 @@ const RESOLUTION_CHAIN: Array<{ width: number; height: number }> = [
 })
 export class CameraService {
   private readonly platformService = inject(PlatformService);
+  private readonly app = App;
 
   private stream: MediaStream | null = null;
   private videoElement: HTMLVideoElement | null = null;
@@ -53,8 +54,6 @@ export class CameraService {
     };
 
     // Try resolution fallback chain
-    let lastError: Error | null = null;
-    
     for (const resolution of RESOLUTION_CHAIN) {
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({
@@ -67,10 +66,10 @@ export class CameraService {
         });
         break; // Success, exit loop
       } catch (error) {
-        lastError = error as Error;
         // OverconstrainedError means this resolution is not supported, try next
         if (error instanceof Error && error.name !== 'OverconstrainedError') {
           // Other errors (permission denied, etc.) should fail immediately
+          this.hasError.set(error.message);
           throw error;
         }
       }
@@ -227,7 +226,7 @@ export class CameraService {
 
     // Capacitor app state listener
     if (this.platformService.isNative()) {
-      this.appStateListener = App.addListener('appStateChange', ({ isActive }) => {
+      this.appStateListener = this.app.addListener('appStateChange', ({ isActive }) => {
         if (!isActive) {
           this.wasPausedByVisibility = true;
           this.pause();
