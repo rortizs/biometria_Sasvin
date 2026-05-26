@@ -129,6 +129,59 @@ describe('KioskComponent', () => {
     expect(component.mode()).toBe('error');
   });
 
+  it('should explain when browser location permission is denied', async () => {
+    fixture.detectChanges();
+    geolocationService.getCurrentPosition.and.returnValue(
+      throwError(() => ({
+        code: 'PERMISSION_DENIED',
+        message: 'Permiso de ubicación denegado',
+        hint: 'Permití ubicación para asistencia.sistemaslab.dev en el navegador.',
+      })),
+    );
+
+    await component.scan();
+
+    expect(attendanceService.checkIn).not.toHaveBeenCalled();
+    expect(component.mode()).toBe('error');
+    expect(component.errorTitle()).toBe('Permiso de ubicación denegado');
+    expect(component.errorMessage()).toContain('no tiene permiso');
+    expect(component.errorHelp()).toContain('Permití ubicación');
+  });
+
+  it('should explain when device GPS is unavailable', async () => {
+    fixture.detectChanges();
+    geolocationService.getCurrentPosition.and.returnValue(
+      throwError(() => ({
+        code: 'POSITION_UNAVAILABLE',
+        message: 'GPS no disponible en este dispositivo',
+      })),
+    );
+
+    await component.scan();
+
+    expect(attendanceService.checkIn).not.toHaveBeenCalled();
+    expect(component.mode()).toBe('error');
+    expect(component.errorTitle()).toBe('GPS no disponible');
+    expect(component.errorHelp()).toContain('Activá la ubicación/GPS');
+  });
+
+  it('should explain when GPS acquisition times out', async () => {
+    fixture.detectChanges();
+    geolocationService.getCurrentPosition.and.returnValue(
+      throwError(() => ({
+        code: 'TIMEOUT',
+        message: 'No se pudo obtener la ubicación a tiempo',
+      })),
+    );
+
+    await component.scan();
+
+    expect(attendanceService.checkIn).not.toHaveBeenCalled();
+    expect(component.mode()).toBe('error');
+    expect(component.errorTitle()).toBe('GPS sin respuesta');
+    expect(component.errorHelp()).toContain('zona con señal');
+  });
+
   it('should continue to GPS and submit attendance when client liveness is inconclusive', async () => {
     fixture.detectChanges();
     livenessService.analyzeLiveness.and.returnValue(
