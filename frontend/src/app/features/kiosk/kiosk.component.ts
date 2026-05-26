@@ -1114,17 +1114,12 @@ export class KioskComponent implements OnInit, OnDestroy {
           error: (err) => reject(err),
         });
       });
-    } catch {
+    } catch (error) {
       // Fresh GPS failed — use cached position if available
       if (!this.currentPosition) {
         this.geoStatus.set('error');
         this.geoError.set('No se pudo obtener la ubicación GPS real del dispositivo.');
-        this.showError({
-          title: 'Ubicación requerida',
-          message:
-            'Se requiere GPS real para marcar asistencia. Verificá los permisos de ubicación.',
-          help: 'Activá la ubicación del dispositivo y permití el acceso desde el navegador.',
-        });
+        this.showError(this.toGeolocationErrorContent(error));
         this.mode.set('error');
         this.resetAfterDelay();
         return;
@@ -1170,6 +1165,42 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.errorTitle.set(content.title);
     this.errorMessage.set(content.message);
     this.errorHelp.set(content.help);
+  }
+
+  private toGeolocationErrorContent(error: unknown): KioskErrorContent {
+    const geoError = error as { code?: string; message?: string; hint?: string };
+
+    if (geoError?.code === 'PERMISSION_DENIED') {
+      return {
+        title: 'Permiso de ubicación denegado',
+        message: 'El navegador no tiene permiso para usar tu ubicación GPS.',
+        help:
+          geoError.hint ??
+          'Abrí los permisos del sitio y permití ubicación para asistencia.sistemaslab.dev.',
+      };
+    }
+
+    if (geoError?.code === 'TIMEOUT') {
+      return {
+        title: 'GPS sin respuesta',
+        message: 'No se pudo obtener tu ubicación GPS a tiempo.',
+        help: 'Activá la ubicación del dispositivo, acercate a una zona con señal y volvé a intentar.',
+      };
+    }
+
+    if (geoError?.code === 'POSITION_UNAVAILABLE' || geoError?.code === 'NOT_SUPPORTED') {
+      return {
+        title: 'GPS no disponible',
+        message: 'No se pudo obtener una ubicación GPS real desde este dispositivo.',
+        help: 'Activá la ubicación/GPS del dispositivo y permití el acceso desde el navegador.',
+      };
+    }
+
+    return {
+      title: 'Ubicación requerida',
+      message: 'Se requiere GPS real para marcar asistencia.',
+      help: 'Activá la ubicación del dispositivo y permití el acceso desde el navegador.',
+    };
   }
 
   private toKioskErrorContent(detail: unknown): KioskErrorContent {
