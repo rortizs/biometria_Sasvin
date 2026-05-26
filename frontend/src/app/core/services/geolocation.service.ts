@@ -1,13 +1,13 @@
 import { Injectable, signal, inject } from '@angular/core';
-import { Observable, from, throwError } from 'rxjs';
-import { catchError, map, tap } from 'rxjs/operators';
+import { type Observable, from, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { Geolocation } from '@capacitor/geolocation';
 import { PlatformService } from './platform.service';
 import {
-  GeoPosition,
+  type GeoPosition,
   GeoError,
-  GeoConfig,
-  GeoErrorCode,
+  type GeoConfig,
+  type GeoErrorCode,
   KIOSK_GEO_CONFIG,
   MOBILE_GEO_CONFIG,
   GEO_ERROR_MESSAGES,
@@ -20,6 +20,7 @@ export type GeoState = 'idle' | 'acquiring' | 'acquired' | 'error';
 })
 export class GeolocationService {
   private readonly platformService = inject(PlatformService);
+  private readonly geolocation = Geolocation;
 
   private readonly _state = signal<GeoState>('idle');
   private readonly _lastPosition = signal<GeoPosition | null>(null);
@@ -57,7 +58,7 @@ export class GeolocationService {
 
   checkPermission(): Observable<'granted' | 'prompt' | 'denied'> {
     if (this.platformService.isNative()) {
-      return from(Geolocation.checkPermissions()).pipe(
+      return from(this.geolocation.checkPermissions()).pipe(
         map(result => {
           const state = result.location;
           if (state === 'granted') return 'granted';
@@ -71,7 +72,7 @@ export class GeolocationService {
       );
     } else {
       // Browser permissions API
-      if (!('permissions' in navigator)) {
+      if (!navigator.permissions?.query) {
         // Fallback for browsers without permissions API
         return from(['prompt'] as const);
       }
@@ -91,7 +92,7 @@ export class GeolocationService {
 
   requestPermission(): Observable<'granted' | 'denied'> {
     if (this.platformService.isNative()) {
-      return from(Geolocation.requestPermissions()).pipe(
+      return from(this.geolocation.requestPermissions()).pipe(
         map(result => {
           return result.location === 'granted' ? 'granted' : 'denied';
         })
@@ -109,12 +110,12 @@ export class GeolocationService {
     if (this.platformService.isNative()) {
       return true; // Capacitor always has geolocation
     }
-    return 'geolocation' in navigator;
+    return !!navigator.geolocation;
   }
 
   private getPositionNative(config: GeoConfig): Observable<GeoPosition> {
     return from(
-      Geolocation.getCurrentPosition({
+      this.geolocation.getCurrentPosition({
         enableHighAccuracy: config.enableHighAccuracy,
         timeout: config.timeout,
         maximumAge: config.maximumAge,
@@ -203,7 +204,7 @@ export class GeolocationService {
       );
     }
     
-    if (message.toLowerCase().includes('timeout')) {
+    if (message.toLowerCase().includes('timeout') || message.toLowerCase().includes('timed out')) {
       return new GeoError('TIMEOUT', GEO_ERROR_MESSAGES.TIMEOUT);
     }
 
