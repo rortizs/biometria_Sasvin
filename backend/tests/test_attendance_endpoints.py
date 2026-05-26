@@ -37,6 +37,10 @@ def allow_liveness(mock_face_service, variance: float = 0.01):
     mock_face_service.check_liveness_from_embeddings.return_value = (True, variance)
 
 
+def reject_liveness(mock_face_service, variance: float = 0.0):
+    mock_face_service.check_liveness_from_embeddings.return_value = (False, variance)
+
+
 def mock_db_execute_result(return_values: list):
     """
     Helper to mock db.execute() with multiple queries.
@@ -243,7 +247,7 @@ class TestCheckInEndpoint:
     async def test_checkin_without_gps_coordinates_is_rejected(
         self, mock_db, mock_employee, mock_location
     ):
-        """Should reject check-in when GPS coordinates are missing."""
+        """Should reject check-in when GPS coordinates are missing before liveness."""
         # Arrange
         request = AttendanceCheckIn(
             images=THREE_IMAGES,
@@ -254,7 +258,7 @@ class TestCheckInEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            allow_liveness(mock_face_service)
+            reject_liveness(mock_face_service)
             mock_face_service.find_best_match = AsyncMock(
                 return_value=(mock_employee, 0.95)
             )
@@ -269,12 +273,13 @@ class TestCheckInEndpoint:
             # Assert
             assert exc_info.value.status_code == 400
             assert "GPS" in exc_info.value.detail
+            mock_face_service.check_liveness_from_embeddings.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_checkin_outside_permitted_area_is_rejected(
         self, mock_db, mock_employee, mock_location
     ):
-        """Should reject check-in if employee is outside permitted radius."""
+        """Should reject check-in outside radius before liveness."""
         # Arrange - coordinates far from location
         request = AttendanceCheckIn(
             images=THREE_IMAGES,
@@ -286,7 +291,7 @@ class TestCheckInEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            allow_liveness(mock_face_service)
+            reject_liveness(mock_face_service)
             mock_face_service.find_best_match = AsyncMock(
                 return_value=(mock_employee, 0.95)
             )
@@ -303,6 +308,7 @@ class TestCheckInEndpoint:
             # Assert
             assert exc_info.value.status_code == 403
             assert "Outside permitted area" in exc_info.value.detail
+            mock_face_service.check_liveness_from_embeddings.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_already_checked_in_today(
@@ -345,14 +351,26 @@ class TestCheckInEndpoint:
             assert response.check_in == mock_attendance_record.check_in
 
     @pytest.mark.asyncio
-    async def test_reject_liveness_failure(self, mock_db):
-        """Should reject static frames that fail liveness detection."""
-        request = AttendanceCheckIn(images=THREE_IMAGES)
+    async def test_reject_liveness_failure_with_valid_geofence(
+        self, mock_db, mock_employee, mock_location
+    ):
+        """Should reject static frames when GPS/geofence are valid."""
+        request = AttendanceCheckIn(
+            images=THREE_IMAGES,
+            latitude=-34.603722,
+            longitude=-58.381592,
+        )
 
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            mock_face_service.check_liveness_from_embeddings.return_value = (False, 0.0)
+            reject_liveness(mock_face_service)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result([None, mock_location])
+            )
 
             with pytest.raises(HTTPException) as exc_info:
                 await check_in(mock_db, request)
@@ -498,7 +516,7 @@ class TestCheckOutEndpoint:
         with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
             mock_face_service = mock_fr.return_value
             mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
-            allow_liveness(mock_face_service)
+            reject_liveness(mock_face_service)
             mock_face_service.find_best_match = AsyncMock(
                 return_value=(mock_employee, 0.95)
             )
@@ -517,6 +535,65 @@ class TestCheckOutEndpoint:
             # Assert
             assert exc_info.value.status_code == 403
             assert "Outside permitted area" in exc_info.value.detail
+            mock_face_service.check_liveness_from_embeddings.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_checkout_without_gps_coordinates_is_rejected_before_liveness(
+        self, mock_db, mock_employee, mock_attendance_record
+    ):
+        """Should reject check-out missing GPS before liveness."""
+        request = AttendanceCheckOut(images=THREE_IMAGES)
+        mock_attendance_record.check_in = datetime.utcnow()
+
+        with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
+            mock_face_service = mock_fr.return_value
+            mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
+            reject_liveness(mock_face_service)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result([mock_attendance_record])
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await check_out(mock_db, request)
+
+            assert exc_info.value.status_code == 400
+            assert "GPS" in exc_info.value.detail
+            mock_face_service.check_liveness_from_embeddings.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_checkout_liveness_failure_with_valid_geofence(
+        self, mock_db, mock_employee, mock_location, mock_attendance_record
+    ):
+        """Should reject static check-out frames when GPS/geofence are valid."""
+        request = AttendanceCheckOut(
+            images=THREE_IMAGES,
+            latitude=-34.603722,
+            longitude=-58.381592,
+        )
+        mock_attendance_record.check_in = datetime.utcnow()
+        mock_attendance_record.geo_validated = True
+
+        with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
+            mock_face_service = mock_fr.return_value
+            mock_face_service.get_face_embedding.return_value = [0.1, 0.2, 0.3]
+            reject_liveness(mock_face_service)
+            mock_face_service.find_best_match = AsyncMock(
+                return_value=(mock_employee, 0.95)
+            )
+            mock_db.execute = AsyncMock(
+                side_effect=mock_db_execute_result(
+                    [mock_attendance_record, mock_location]
+                )
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await check_out(mock_db, request)
+
+            assert exc_info.value.status_code == 400
+            assert "Liveness check failed" in exc_info.value.detail
 
 
 class TestAttendanceListEndpoints:

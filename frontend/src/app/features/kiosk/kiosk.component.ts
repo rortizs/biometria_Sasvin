@@ -1,18 +1,18 @@
 import {
   Component,
-  OnInit,
-  OnDestroy,
+  type OnInit,
+  type OnDestroy,
   inject,
   signal,
   ViewChild,
-  ElementRef,
+  type ElementRef,
   computed,
   afterNextRender,
   isDevMode,
 } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
+import { SwUpdate, type VersionReadyEvent } from '@angular/service-worker';
 import { filter } from 'rxjs/operators';
 import { CameraService } from '../../core/services/camera.service';
 import { AttendanceService } from '../../core/services/attendance.service';
@@ -20,9 +20,9 @@ import { GeolocationService } from '../../core/services/geolocation.service';
 import { LocationService } from '../../core/services/location.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { LivenessService } from '../../core/services/liveness.service';
-import { GeoPosition } from '../../core/models/geolocation.model';
-import { Location as AppLocation } from '../../core/models/location.model';
-import { AttendanceRecord } from '../../core/models/attendance.model';
+import type { GeoPosition } from '../../core/models/geolocation.model';
+import type { Location as AppLocation } from '../../core/models/location.model';
+import type { AttendanceRecord } from '../../core/models/attendance.model';
 
 const KIOSK_LOCATION_KEY = 'kiosk_location_id';
 const KIOSK_RESULT_RESET_DELAY_MS = 12000;
@@ -1093,18 +1093,9 @@ export class KioskComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Client-side liveness check: detect static photos before sending to server
-    const livenessResult = await this.livenessService.analyzeLiveness(images);
-    if (!livenessResult.isLive) {
-      this.showError({
-        title: 'Rostro real requerido',
-        message: 'Se detectó una imagen estática. Por favor usá tu rostro real frente a la cámara.',
-        help: 'No uses fotos, pantallas ni impresiones. Mirá directo a la cámara del kiosk.',
-      });
-      this.mode.set('error');
-      this.resetAfterDelay();
-      return;
-    }
+    // Client-side liveness is advisory only. The backend remains authoritative,
+    // after GPS/geofence checks, so users see the real rejection reason.
+    await this.livenessService.analyzeLiveness(images);
 
     // Always request a fresh GPS position at scan time.
     // Falls back to the cached position only if the fresh request fails
