@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { type ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { signal } from '@angular/core';
 
@@ -129,7 +129,7 @@ describe('KioskComponent', () => {
     expect(component.mode()).toBe('error');
   });
 
-  it('should clear the previous liveness error as soon as a new scan starts', async () => {
+  it('should continue to GPS and submit attendance when client liveness is inconclusive', async () => {
     fixture.detectChanges();
     livenessService.analyzeLiveness.and.returnValue(
       Promise.resolve({
@@ -138,29 +138,36 @@ describe('KioskComponent', () => {
         framesAnalyzed: 3,
       }),
     );
-
-    await component.scan();
-
-    expect(component.mode()).toBe('error');
-    expect(component.errorMessage()).toContain('imagen estática');
-
-    let resolveSecondCapture!: (images: string[]) => void;
-    cameraService.captureFrames.and.returnValue(
-      new Promise((resolve) => {
-        resolveSecondCapture = resolve;
+    geolocationService.isSupported.and.returnValue(true);
+    geolocationService.getCurrentPosition.and.returnValue(
+      of({
+        latitude: 14.3,
+        longitude: -89.9,
+        accuracy: 5,
       }),
     );
 
-    void component.scan();
+    await component.scan();
 
-    expect(component.mode()).toBe('scanning');
-    expect(component.errorMessage()).toBe('');
-
-    resolveSecondCapture(['img1', 'img2', 'img3']);
+    expect(livenessService.analyzeLiveness).toHaveBeenCalled();
+    expect(geolocationService.getCurrentPosition).toHaveBeenCalled();
+    expect(attendanceService.checkIn).toHaveBeenCalledWith({
+      images: ['img1', 'img2', 'img3'],
+      latitude: 14.3,
+      longitude: -89.9,
+    });
+    expect(component.mode()).toBe('success');
   });
 
   it('should translate outside-perimeter backend errors and preserve the distance', async () => {
     fixture.detectChanges();
+    livenessService.analyzeLiveness.and.returnValue(
+      Promise.resolve({
+        isLive: false,
+        variance: 1,
+        framesAnalyzed: 3,
+      }),
+    );
     geolocationService.isSupported.and.returnValue(true);
     geolocationService.getCurrentPosition.and.returnValue(
       of({

@@ -83,6 +83,19 @@ def _reject_if_outside_perimeter(distance: float | None) -> None:
     )
 
 
+def _reject_if_not_live(face_service: FaceRecognitionService, embeddings: list) -> None:
+    """Reject static/spoofed frames after identity and geolocation are valid."""
+    if len(embeddings) < 2:
+        return
+
+    is_live, variance = face_service.check_liveness_from_embeddings(embeddings)
+    if not is_live:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Liveness check failed: static image detected. Please use your real face.",
+        )
+
+
 @router.post(
     "/check-in",
     response_model=AttendanceResponse,
@@ -135,15 +148,6 @@ async def check_in(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No face detected in the provided images",
         )
-
-    # Liveness check: require variance between frames
-    if len(all_embeddings) >= 2:
-        is_live, variance = face_service.check_liveness_from_embeddings(all_embeddings)
-        if not is_live:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Liveness check failed: static image detected. Please use your real face.",
-            )
 
     query_embedding = all_embeddings[0]
 
@@ -200,6 +204,8 @@ async def check_in(
 
     if not geo_valid:
         _reject_if_outside_perimeter(distance)
+
+    _reject_if_not_live(face_service, all_embeddings)
 
     attendance.check_in = now
     attendance.check_in_confidence = confidence
@@ -298,15 +304,6 @@ async def check_out(
             detail="No face detected in the provided images",
         )
 
-    # Liveness check: require variance between frames
-    if len(all_embeddings) >= 2:
-        is_live, variance = face_service.check_liveness_from_embeddings(all_embeddings)
-        if not is_live:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Liveness check failed: static image detected. Please use your real face.",
-            )
-
     query_embedding = all_embeddings[0]
 
     match = await face_service.find_best_match(db, query_embedding)
@@ -359,6 +356,8 @@ async def check_out(
 
     if not geo_valid:
         _reject_if_outside_perimeter(distance)
+
+    _reject_if_not_live(face_service, all_embeddings)
 
     attendance.check_out = now
     attendance.check_out_confidence = confidence
