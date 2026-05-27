@@ -46,6 +46,10 @@ export class CameraService {
   readonly error = this.hasError.asReadonly();
   readonly capturing = this.isCapturing.asReadonly();
 
+  isSupported(): boolean {
+    return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  }
+
   async start(videoEl: HTMLVideoElement, config: Partial<CameraConfig> = {}): Promise<void> {
     const finalConfig = { 
       ...DEFAULT_CONFIG, 

@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { AttendanceScanComponent } from './attendance-scan.component';
 import { CameraService } from '../../core/services/camera.service';
 import { GeolocationService } from '../../core/services/geolocation.service';
@@ -123,10 +123,15 @@ describe('AttendanceScanComponent', () => {
       fixture.detectChanges();
     });
 
-    it('should return true when camera is active and not capturing', () => {
+    it('should return true when camera is active, not capturing, and GPS is available', () => {
       Object.defineProperty(cameraService, 'active', { value: signal(true) });
       Object.defineProperty(cameraService, 'capturing', { value: signal(false) });
       component.cameraError.set(null);
+      component.lastGeoPosition.set({
+        latitude: -34.603722,
+        longitude: -58.381592,
+        accuracy: 10,
+      });
       component.mode.set('idle');
 
       expect(component.canScan()).toBe(true);
@@ -163,6 +168,16 @@ describe('AttendanceScanComponent', () => {
       Object.defineProperty(cameraService, 'active', { value: signal(true) });
       Object.defineProperty(cameraService, 'capturing', { value: signal(false) });
       component.cameraError.set('Camera error');
+      component.mode.set('idle');
+
+      expect(component.canScan()).toBe(false);
+    });
+
+    it('should return false if GPS position is missing', () => {
+      Object.defineProperty(cameraService, 'active', { value: signal(true) });
+      Object.defineProperty(cameraService, 'capturing', { value: signal(false) });
+      component.cameraError.set(null);
+      component.lastGeoPosition.set(null);
       component.mode.set('idle');
 
       expect(component.canScan()).toBe(false);
@@ -330,6 +345,16 @@ describe('AttendanceScanComponent', () => {
 
       expect(component.mode()).toBe('error');
       expect(component.errorMessage()).toContain('Error de conexión');
+    });
+
+    it('should not call backend when GPS position is missing', async () => {
+      component.lastGeoPosition.set(null);
+
+      await component.handleScan();
+
+      expect(cameraService.captureFrames).not.toHaveBeenCalled();
+      expect(attendanceService.checkIn).not.toHaveBeenCalled();
+      expect(component.mode()).toBe('idle');
     });
 
     it('should handle capture failure', async () => {
