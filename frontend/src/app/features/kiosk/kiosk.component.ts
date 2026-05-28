@@ -923,6 +923,8 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly geoStatus = signal<GeoStatus>('idle');
   readonly geoError = signal<string>('');
   private currentPosition: GeoPosition | null = null;
+  private currentPositionTimestamp: number | null = null;
+  private readonly maxCachedPositionAgeMs = 5 * 60 * 1000;
 
   readonly kioskLocation = signal<AppLocation | null>(null);
   readonly availableLocations = signal<AppLocation[]>([]);
@@ -988,11 +990,13 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.geolocationService.getCurrentPosition().subscribe({
       next: (position) => {
         this.currentPosition = position;
+        this.currentPositionTimestamp = Date.now();
         this.geoStatus.set('success');
         this.geoError.set('');
       },
       error: () => {
         this.currentPosition = null;
+        this.currentPositionTimestamp = null;
         this.geoStatus.set('error');
         this.geoError.set('No se pudo obtener la ubicación GPS real del dispositivo.');
       },
@@ -1013,6 +1017,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     localStorage.removeItem(KIOSK_LOCATION_KEY);
     this.kioskLocation.set(null);
     this.currentPosition = null;
+    this.currentPositionTimestamp = null;
     this.geoStatus.set('idle');
     this.geoError.set('');
     this.showLocationPicker.set(false);
@@ -1060,6 +1065,16 @@ export class KioskComponent implements OnInit, OnDestroy {
   }
 
   async startCamera(): Promise<void> {
+    if (!this.cameraService.isSupported()) {
+      this.showError({
+        title: 'Cámara requerida',
+        message: 'Este dispositivo o navegador no tiene una cámara disponible para el kiosk.',
+        help: 'Usá una tablet Android con cámara y GPS habilitados para operar el kiosk.',
+      });
+      this.mode.set('error');
+      return;
+    }
+
     try {
       await this.cameraService.start(this.videoElement.nativeElement);
     } catch (error) {
@@ -1107,6 +1122,7 @@ export class KioskComponent implements OnInit, OnDestroy {
         this.geolocationService.getCurrentPosition().subscribe({
           next: (pos) => {
             this.currentPosition = pos;
+            this.currentPositionTimestamp = Date.now();
             this.geoStatus.set('success');
             this.geoError.set('');
             resolve(pos);
@@ -1115,8 +1131,10 @@ export class KioskComponent implements OnInit, OnDestroy {
         });
       });
     } catch (error) {
-      // Fresh GPS failed — use cached position if available
-      if (!this.currentPosition) {
+      // Fresh GPS failed — use cached position only if it is recent enough.
+      if (!this.isCurrentPositionFresh()) {
+        this.currentPosition = null;
+        this.currentPositionTimestamp = null;
         this.geoStatus.set('error');
         this.geoError.set('No se pudo obtener la ubicación GPS real del dispositivo.');
         this.showError(this.toGeolocationErrorContent(error));
@@ -1124,8 +1142,16 @@ export class KioskComponent implements OnInit, OnDestroy {
         this.resetAfterDelay();
         return;
       }
-      // currentPosition already set — use it as fallback
       position = this.currentPosition;
+    }
+
+    if (!position) {
+      this.geoStatus.set('error');
+      this.geoError.set('No se pudo obtener la ubicación GPS real del dispositivo.');
+      this.showError(this.toGeolocationErrorContent(null));
+      this.mode.set('error');
+      this.resetAfterDelay();
+      return;
     }
 
     const request: { images: string[]; latitude?: number; longitude?: number } = {
@@ -1165,6 +1191,14 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.errorTitle.set(content.title);
     this.errorMessage.set(content.message);
     this.errorHelp.set(content.help);
+  }
+
+  private isCurrentPositionFresh(): boolean {
+    return (
+      this.currentPosition !== null &&
+      this.currentPositionTimestamp !== null &&
+      Date.now() - this.currentPositionTimestamp <= this.maxCachedPositionAgeMs
+    );
   }
 
   private toGeolocationErrorContent(error: unknown): KioskErrorContent {

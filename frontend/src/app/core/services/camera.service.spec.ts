@@ -10,6 +10,13 @@ describe('CameraService', () => {
   let mockTrack: jasmine.SpyObj<MediaStreamTrack>;
 
   beforeEach(() => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: { getUserMedia: () => Promise.reject(new Error('Not mocked')) },
+        configurable: true,
+      });
+    }
+
     // Mock PlatformService
     const platformSpy = jasmine.createSpyObj('PlatformService', ['jpegQuality', 'isNative']);
     platformSpy.jpegQuality.and.returnValue(0.8);
@@ -37,6 +44,42 @@ describe('CameraService', () => {
 
   afterEach(() => {
     service.stop();
+  });
+
+  describe('isSupported', () => {
+    let mediaDevicesDescriptor: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      mediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+    });
+
+    afterEach(() => {
+      if (mediaDevicesDescriptor) {
+        Object.defineProperty(navigator, 'mediaDevices', mediaDevicesDescriptor);
+      }
+    });
+
+    it('should return true when getUserMedia is available', () => {
+      expect(service.isSupported()).toBe(true);
+    });
+
+    it('should return false when mediaDevices is unavailable', () => {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: undefined,
+        configurable: true,
+      });
+
+      expect(service.isSupported()).toBe(false);
+    });
+
+    it('should return false when getUserMedia is unavailable', () => {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: {},
+        configurable: true,
+      });
+
+      expect(service.isSupported()).toBe(false);
+    });
   });
 
   describe('start', () => {

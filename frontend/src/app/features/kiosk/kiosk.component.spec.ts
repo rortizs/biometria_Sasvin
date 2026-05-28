@@ -23,10 +23,11 @@ describe('KioskComponent', () => {
   beforeEach(async () => {
     localStorage.clear();
 
-    const cameraSpy = jasmine.createSpyObj('CameraService', ['start', 'stop', 'captureFrames'], {
+    const cameraSpy = jasmine.createSpyObj('CameraService', ['isSupported', 'start', 'stop', 'captureFrames'], {
       active: signal(true),
       capturing: signal(false),
     });
+    cameraSpy.isSupported.and.returnValue(true);
     cameraSpy.start.and.returnValue(Promise.resolve());
     cameraSpy.captureFrames.and.returnValue(Promise.resolve(['img1', 'img2', 'img3']));
 
@@ -119,6 +120,26 @@ describe('KioskComponent', () => {
     fixture?.destroy();
   });
 
+  it('should show a GPS error when browser geolocation is unsupported', () => {
+    fixture.detectChanges();
+
+    expect(geolocationService.isSupported).toHaveBeenCalled();
+    expect(component.geoStatus()).toBe('error');
+    expect(component.geoError()).toContain('geolocalización');
+  });
+
+  it('should block kiosk camera when camera API is unsupported', async () => {
+    cameraService.isSupported.and.returnValue(false);
+
+    fixture.detectChanges();
+    await component.startCamera();
+
+    expect(cameraService.start).not.toHaveBeenCalled();
+    expect(component.mode()).toBe('error');
+    expect(component.errorTitle()).toBe('Cámara requerida');
+    expect(component.errorHelp()).toContain('tablet Android con cámara y GPS');
+  });
+
   it('should not submit attendance using configured location when real GPS is unavailable', async () => {
     fixture.detectChanges();
 
@@ -127,6 +148,28 @@ describe('KioskComponent', () => {
     expect(cameraService.captureFrames).toHaveBeenCalled();
     expect(attendanceService.checkIn).not.toHaveBeenCalled();
     expect(component.mode()).toBe('error');
+  });
+
+  it('should reject stale cached GPS when fresh scan-time GPS fails', async () => {
+    fixture.detectChanges();
+    (component as any).currentPosition = {
+      latitude: 14.3,
+      longitude: -89.9,
+      accuracy: 5,
+    };
+    (component as any).currentPositionTimestamp = Date.now() - 6 * 60 * 1000;
+    geolocationService.getCurrentPosition.and.returnValue(
+      throwError(() => ({
+        code: 'TIMEOUT',
+        message: 'No se pudo obtener la ubicación a tiempo',
+      })),
+    );
+
+    await component.scan();
+
+    expect(attendanceService.checkIn).not.toHaveBeenCalled();
+    expect(component.mode()).toBe('error');
+    expect(component.errorTitle()).toBe('GPS sin respuesta');
   });
 
   it('should explain when browser location permission is denied', async () => {
