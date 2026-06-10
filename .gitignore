@@ -55,3 +55,19 @@ htmlcov/
 # Logs
 *.log
 logs/
+
+# AI assistants and local agent state
+.claude/
+.engram/
+.opencode/
+.agents/
+.cursor/
+.continue/
+.windsurf/
+.aider*
+.atl/
+.pi/
+CLAUDE.md
+AGENTS.md
+*.prompt
+*.prompts
