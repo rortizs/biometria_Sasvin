@@ -5,7 +5,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, get_current_active_admin
+from app.api.deps import (
+    ensure_can_assign_role,
+    get_db,
+    get_current_user,
+    get_current_active_admin,
+    settings,
+)
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -82,6 +88,7 @@ async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_admin: Annotated[User, Depends(get_current_active_admin)],
     user_in: UserCreate,
+    configured_settings=settings,
 ) -> User:
     """
     Registrar un nuevo usuario del sistema. Requiere rol admin.
@@ -94,6 +101,14 @@ async def register(
     El email debe ser único y pertenecer al dominio @miumg.edu.gt.
     La contraseña se hashea con bcrypt antes de guardarse.
     """
+    if user_in.email.casefold() == configured_settings.bootstrap_admin_email.casefold():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reserved bootstrap admin email cannot be assigned through auth register API",
+        )
+
+    ensure_can_assign_role(current_admin, user_in.role, configured_settings)
+
     result = await db.execute(select(User).where(User.email == user_in.email))
     existing_user = result.scalar_one_or_none()
 
