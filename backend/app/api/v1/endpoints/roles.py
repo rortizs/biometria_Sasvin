@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin, get_current_user
+from app.api.deps import ensure_can_assign_role, get_db, get_current_active_admin, get_current_user, settings
 from app.models.role import Role
 from app.models.permission import Permission
 from app.models.role_permission import UserRoleAssignment
@@ -64,9 +64,12 @@ async def get_role(
 @router.post("/", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
 async def create_role(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_active_admin)],
     role_in: RoleCreate,
+    configured_settings=settings,
 ) -> Role:
+    ensure_can_assign_role(current_user, role_in.name, configured_settings)
+
     existing = await db.execute(select(Role).where(Role.name == role_in.name))
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -91,11 +94,14 @@ async def create_role(
 @router.patch("/{role_id}", response_model=RoleResponse)
 async def update_role(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_active_admin)],
     role_id: UUID,
     role_in: RoleUpdate,
+    configured_settings=settings,
 ) -> Role:
     role = await _get_role_or_404(db, role_id)
+    if role_in.name is not None:
+        ensure_can_assign_role(current_user, role_in.name, configured_settings)
 
     update_data = role_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -160,6 +166,7 @@ async def assign_user_roles(
     current_user: Annotated[User, Depends(get_current_active_admin)],
     user_id: UUID,
     payload: UserRoleAssign,
+    configured_settings=settings,
 ) -> list[UserRoleAssignment]:
     # Verify target user exists
     user_result = await db.execute(select(User).where(User.id == user_id))
@@ -176,6 +183,9 @@ async def assign_user_roles(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="One or more role IDs are invalid",
         )
+
+    for role in roles:
+        ensure_can_assign_role(current_user, role.name, configured_settings)
 
     # Business rule: single-role constraint for secretaria/catedratico
     if len(payload.role_ids) > 1:

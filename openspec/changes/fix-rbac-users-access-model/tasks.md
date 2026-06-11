@@ -27,10 +27,21 @@ Chain strategy: feature-branch-chain
 
 ## Phase 1: Foundation / Migration
 
-- [ ] 1.1 RED: add canonical role, unknown-role denial, and bootstrap detection tests in `backend/tests/test_rbac_access_model.py`.
-- [ ] 1.2 GREEN: update `backend/app/core/config.py`, `backend/app/models/user.py`, and `backend/alembic/versions/*_canonical_rbac_roles.py`.
-- [ ] 1.3 RED/GREEN: test/update `backend/create_admin_user.py` and `backend/create_admin.sql` for env bootstrap repair.
-- [ ] 1.4 RED/GREEN: test/add permission and object-access helpers in `backend/app/api/deps.py`.
+- [x] 1.1 RED: add canonical role, unknown-role denial, and bootstrap detection tests in `backend/tests/test_rbac_access_model.py`.
+- [x] 1.2 GREEN: update `backend/app/core/config.py`, `backend/app/models/user.py`, and `backend/alembic/versions/*_canonical_rbac_roles.py`.
+- [x] 1.3 RED/GREEN: test/update `backend/create_admin_user.py` and `backend/create_admin.sql` for env bootstrap repair.
+- [x] 1.4 RED/GREEN: test/add permission and object-access helpers in `backend/app/api/deps.py`.
+
+## PR1 Foundation Blocker Fixes
+
+- [x] B1 RED/GREEN: enforce `protect_bootstrap_admin_mutation()` in users endpoints for update, deactivate via `is_active`, delete, and password change.
+- [x] B2 RED/GREEN: enforce `ensure_can_assign_role()` in users and roles endpoints so only bootstrap `ADMIN` can create, assign, or replace `DEV`.
+- [x] B3 RED/GREEN: preserve deploy-safe access for migrated business admins while avoiding total `has_permission()` access for non-bootstrap `ADMIN`.
+- [x] B4 RED/GREEN: validate `LEGACY_ADMIN_FALLBACK_ROLE` against a non-system business-role allowlist.
+- [x] B5 RED/GREEN: make Alembic downgrade map canonical user roles back to legacy values without deleting role assignments or canonical role rows.
+- [x] B6 RED/GREEN: make `ADMIN` system-only by blocking `ADMIN` assignment through users and RBAC role assignment backoffice paths, including bootstrap actors.
+- [x] B7 RED/GREEN: reserve the configured bootstrap admin email from users API reassignment paths case-insensitively and keep bootstrap admin mutation server-side only.
+- [x] B8 RED/GREEN: enforce `ensure_can_assign_role()` and reserved bootstrap email protection in `/auth/register` so business admins cannot create `ADMIN` or `DEV` users.
 
 ## Phase 2: Users / RBAC APIs
 
