@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import (
     ensure_can_assign_role,
     get_db,
-    get_current_active_admin,
     protect_bootstrap_admin_mutation,
+    require_permission,
     settings,
 )
 from app.core.security import get_password_hash
@@ -38,7 +38,7 @@ async def _get_user_or_404(db: AsyncSession, user_id: UUID) -> User:
 )
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("users.view"))],
     configured_settings=settings,
 ) -> list[User]:
     """Listar todos los usuarios del sistema. Requiere rol admin."""
@@ -77,7 +77,7 @@ def _ensure_bootstrap_email_is_not_assigned(email: str | None, configured_settin
 )
 async def update_user(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("users.manage"))],
     user_id: UUID,
     user_in: UserUpdate,
     configured_settings=settings,
@@ -122,7 +122,7 @@ async def update_user(
 )
 async def delete_user(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("users.manage"))],
     user_id: UUID,
     configured_settings=settings,
 ) -> None:
@@ -151,7 +151,7 @@ async def delete_user(
 )
 async def change_user_password(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("users.manage"))],
     user_id: UUID,
     payload: UserPasswordChange,
     configured_settings=settings,

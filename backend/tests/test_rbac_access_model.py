@@ -15,11 +15,13 @@ from app.api.deps import (
     is_bootstrap_admin,
     get_current_active_admin,
 )
+from app.api import deps
 from app.core.config import Settings
 from app.models.user import CANONICAL_ROLE_VALUES, UserRole, canonical_role_from_value
 from app.schemas.role import RoleCreate, UserRoleAssign
 from app.schemas.user import UserCreate, UserUpdate, UserPasswordChange
 from app.api.v1.endpoints import auth as auth_endpoint
+from app.api.v1.endpoints import permissions as permissions_endpoint
 from app.api.v1.endpoints import roles as roles_endpoint
 from app.api.v1.endpoints import users as users_endpoint
 from create_admin_user import build_bootstrap_admin_values, repair_bootstrap_admin_instance
@@ -93,6 +95,18 @@ def _load_canonical_migration():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _route_permission_codes(router, path: str, method: str) -> set[str]:
+    route = next(r for r in router.routes if getattr(r, "path", None) == path and method in r.methods)
+    codes: set[str] = set()
+    for dependency in route.dependant.dependencies:
+        nonlocals = inspect.getclosurevars(dependency.call).nonlocals
+        if "code" in nonlocals:
+            codes.add(nonlocals["code"])
+        if "codes" in nonlocals:
+            codes.update(nonlocals["codes"])
+    return codes
 
 
 def test_user_role_enum_exposes_only_canonical_values_with_legacy_aliases():
@@ -620,6 +634,132 @@ async def test_roles_assignment_allows_bootstrap_admin_to_assign_dev():
     assert assignments == [assignment]
     db.add_all.assert_called_once()
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_technical_rbac_dependency_allows_dev_and_bootstrap_but_denies_business_roles():
+    settings = _settings("root@example.com")
+    bootstrap = _user("root@example.com", UserRole.ADMIN)
+    developer = _user("dev@example.com", UserRole.DEV)
+    decano = _user("dean@example.com", UserRole.DECANO)
+    owner = _user("owner@example.com", UserRole.DUEÑO)
+
+    assert await deps.get_current_technical_rbac_admin(bootstrap, settings) is bootstrap
+    assert await deps.get_current_technical_rbac_admin(developer, settings) is developer
+
+    for actor in (decano, owner):
+        with pytest.raises(HTTPException) as exc_info:
+            await deps.get_current_technical_rbac_admin(actor, settings)
+        assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_roles_permission_matrix_denies_business_top_role_mutation():
+    settings = _settings("root@example.com")
+    actor = _user("dean@example.com", UserRole.DECANO)
+    role = SimpleNamespace(id=uuid4(), name="DIRECTOR", permissions=[])
+    permission = SimpleNamespace(id=uuid4(), code="users.view")
+    db = _mock_db(_db_result(value=role), _db_result(values=[permission]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await roles_endpoint.set_role_permissions(db, actor, role.id, [permission.id], settings)
+
+    assert exc_info.value.status_code == 403
+    assert role.permissions == []
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_roles_crud_denies_business_top_role_access_to_rbac_internals():
+    settings = _settings("root@example.com")
+    actor = _user("owner@example.com", UserRole.DUEÑO)
+    role = SimpleNamespace(id=uuid4(), name="DIRECTOR")
+
+    list_db = _mock_db(_db_result(values=[role]))
+    with pytest.raises(HTTPException) as list_exc:
+        await roles_endpoint.list_roles(list_db, actor, True, settings)
+    assert list_exc.value.status_code == 403
+    list_db.execute.assert_not_awaited()
+
+    create_db = _mock_db(_db_result(value=None))
+    with pytest.raises(HTTPException) as create_exc:
+        await roles_endpoint.create_role(
+            create_db,
+            actor,
+            RoleCreate(name="DIRECTOR", description="Academic", permission_ids=[]),
+            settings,
+        )
+    assert create_exc.value.status_code == 403
+    create_db.add.assert_not_called()
+
+    delete_db = _mock_db(_db_result(value=role))
+    with pytest.raises(HTTPException) as delete_exc:
+        await roles_endpoint.delete_role(delete_db, actor, role.id, settings)
+    assert delete_exc.value.status_code == 403
+    delete_db.delete.assert_not_awaited()
+
+
+def test_users_routes_require_backend_permissions_not_deploy_safe_admin_role_only():
+    assert "users.view" in _route_permission_codes(users_endpoint.router, "/", "GET")
+    assert "users.manage" in _route_permission_codes(users_endpoint.router, "/{user_id}", "PATCH")
+    assert "users.manage" in _route_permission_codes(users_endpoint.router, "/{user_id}", "DELETE")
+    assert "users.manage" in _route_permission_codes(
+        users_endpoint.router, "/{user_id}/change-password", "POST"
+    )
+
+
+@pytest.mark.asyncio
+async def test_current_user_loads_role_permissions_for_backend_permission_checks(monkeypatch):
+    user = _user("dev@example.com", UserRole.DEV, is_active=True)
+    db = _mock_db(_db_result(value=user))
+    monkeypatch.setattr(deps, "decode_token", lambda token: {"sub": str(user.id), "type": "access"})
+
+    assert await deps.get_current_user(db, "token") is user
+
+    statement = db.execute.await_args.args[0]
+    assert statement._with_options
+
+
+@pytest.mark.asyncio
+async def test_permissions_list_denies_business_top_role_access_to_rbac_internals():
+    settings = _settings("root@example.com")
+    actor = _user("owner@example.com", UserRole.DUEÑO)
+    db = _mock_db(_db_result(values=[]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await permissions_endpoint.list_permissions(db, actor, None, settings)
+
+    assert exc_info.value.status_code == 403
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_roles_user_role_lookup_denies_bootstrap_admin_detail_access():
+    settings = _settings("root@example.com")
+    actor = _user("dev@example.com", UserRole.DEV)
+    bootstrap = _user("root@example.com", UserRole.ADMIN)
+    db = _mock_db(_db_result(value=bootstrap), _db_result(values=[]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await roles_endpoint.get_user_roles(db, actor, bootstrap.id, settings)
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_roles_assignment_denies_bootstrap_admin_target_mutation():
+    settings = _settings("root@example.com")
+    actor = _user("dev@example.com", UserRole.DEV)
+    bootstrap = _user("root@example.com", UserRole.ADMIN)
+    role = SimpleNamespace(id=uuid4(), name="DIRECTOR")
+    db = _mock_db(_db_result(value=bootstrap), _db_result(values=[role]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await roles_endpoint.assign_user_roles(db, actor, bootstrap.id, UserRoleAssign(role_ids=[role.id]), settings)
+
+    assert exc_info.value.status_code == 403
+    db.add_all.assert_not_called()
+    db.commit.assert_not_awaited()
 
 
 def test_create_admin_values_are_env_driven_and_repair_existing_admin():

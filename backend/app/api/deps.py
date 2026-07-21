@@ -5,10 +5,13 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.security import decode_token
 from app.db.session import get_db
+from app.models.role import Role
+from app.models.role_permission import UserRoleAssignment
 from app.models.user import User, UserRole, canonical_role_from_value
 
 settings = get_settings()
@@ -146,7 +149,15 @@ async def get_current_user(
     if user_id is None:
         raise credentials_exception
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .options(
+            selectinload(User.user_roles)
+            .selectinload(UserRoleAssignment.role)
+            .selectinload(Role.permissions)
+        )
+    )
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -168,6 +179,17 @@ async def get_current_active_admin(
     if not (_canonical_roles_for_user(current_user) & deploy_safe_admin_roles):
         raise _permission_denied()
     return current_user
+
+
+async def get_current_technical_rbac_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+    configured_settings=settings,
+) -> User:
+    if is_bootstrap_admin(current_user, configured_settings):
+        return current_user
+    if UserRole.DEV in _canonical_roles_for_user(current_user, configured_settings):
+        return current_user
+    raise _permission_denied()
 
 
 async def get_current_coordinador_or_above(

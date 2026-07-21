@@ -45,10 +45,10 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: Users / RBAC APIs
 
-- [ ] 2.1 RED: add users API tests for bootstrap `ADMIN` list/update/deactivate/reset/delete denial.
-- [ ] 2.2 GREEN: update `backend/app/api/v1/endpoints/users.py` to hide/protect bootstrap admin and reject permission-matrix writes.
-- [ ] 2.3 RED/GREEN: test/enforce DEV assignment; only bootstrap `ADMIN` may create or assign `DEV`.
-- [ ] 2.4 RED/GREEN: test/update `backend/app/api/v1/endpoints/roles.py` and `permissions.py` for DEV-only RBAC internals.
+- [x] 2.1 RED: add users API tests for bootstrap `ADMIN` list/update/deactivate/reset/delete denial.
+- [x] 2.2 GREEN: update `backend/app/api/v1/endpoints/users.py` to hide/protect bootstrap admin and reject permission-matrix writes.
+- [x] 2.3 RED/GREEN: test/enforce DEV assignment; only bootstrap `ADMIN` may create or assign `DEV`.
+- [x] 2.4 RED/GREEN: test/update `backend/app/api/v1/endpoints/roles.py` and `permissions.py` for DEV-only RBAC internals.
 
 ## Phase 3: Workflow / Attendance Enforcement
 
