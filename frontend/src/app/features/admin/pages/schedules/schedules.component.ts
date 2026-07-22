@@ -1252,6 +1252,7 @@ export class SchedulesComponent implements OnInit {
   readonly loading = signal(false);
   readonly selectedEmployees = signal<string[]>([]);
   readonly selectedCells = signal<Map<string, Set<string>>>(new Map());
+  private calendarLoadToken = 0;
 
   // Modal states
   readonly showPatternModal = signal(false);
@@ -1269,6 +1270,10 @@ export class SchedulesComponent implements OnInit {
     startDate: this.getWeekStart(new Date()),
     endDate: this.getWeekEnd(new Date()),
   };
+  readonly calendarRange = signal({
+    startDate: this.filters.startDate,
+    endDate: this.filters.endDate,
+  });
 
   // Forms
   patternForm = this.getEmptyPatternForm();
@@ -1289,20 +1294,21 @@ export class SchedulesComponent implements OnInit {
   // Computed values
   readonly weekDays = computed<WeekDay[]>(() => {
     const days: WeekDay[] = [];
-    const start = new Date(this.filters.startDate);
-    const end = new Date(this.filters.endDate);
+    const range = this.calendarRange();
+    const start = this.parseDateOnly(range.startDate);
+    const end = this.parseDateOnly(range.endDate);
     const today = new Date().toISOString().split('T')[0];
 
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
     const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
       const dateStr = d.toISOString().split('T')[0];
       days.push({
         date: dateStr,
-        dayName: dayNames[d.getDay()],
-        dayNumber: d.getDate(),
-        monthShort: monthNames[d.getMonth()],
+        dayName: dayNames[d.getUTCDay()],
+        dayNumber: d.getUTCDate(),
+        monthShort: monthNames[d.getUTCMonth()],
         isToday: dateStr === today,
       });
     }
@@ -1310,10 +1316,11 @@ export class SchedulesComponent implements OnInit {
   });
 
   readonly weekLabel = computed(() => {
-    const start = new Date(this.filters.startDate);
-    const end = new Date(this.filters.endDate);
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-    return `${start.toLocaleDateString('es', options)} - ${end.toLocaleDateString('es', options)}, ${end.getFullYear()}`;
+    const range = this.calendarRange();
+    const start = this.parseDateOnly(range.startDate);
+    const end = this.parseDateOnly(range.endDate);
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', timeZone: 'UTC' };
+    return `${start.toLocaleDateString('es', options)} - ${end.toLocaleDateString('es', options)}, ${end.getUTCFullYear()}`;
   });
 
   readonly filteredEmployeesList = computed(() => {
@@ -1411,10 +1418,18 @@ export class SchedulesComponent implements OnInit {
   }
 
   loadCalendar(): void {
+    const loadToken = ++this.calendarLoadToken;
     this.loading.set(true);
+    this.calendarRange.set({
+      startDate: this.filters.startDate,
+      endDate: this.filters.endDate,
+    });
 
     this.scheduleService.getCalendar(this.filters.startDate, this.filters.endDate).subscribe({
       next: (response) => {
+        if (loadToken !== this.calendarLoadToken) {
+          return;
+        }
         this.calendar.set(response.employees);
 
         // Fallback: if employees array is empty but calendar has employees, extract from calendar
@@ -1441,6 +1456,9 @@ export class SchedulesComponent implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
+        if (loadToken !== this.calendarLoadToken) {
+          return;
+        }
         console.error('Error loading calendar:', err);
         this.loading.set(false);
       },
@@ -1457,18 +1475,14 @@ export class SchedulesComponent implements OnInit {
 
   // Week Navigation
   previousWeek(): void {
-    const start = new Date(this.filters.startDate);
-    start.setDate(start.getDate() - 7);
-    this.filters.startDate = this.getWeekStart(start);
-    this.filters.endDate = this.getWeekEnd(start);
+    this.filters.startDate = this.shiftDateOnly(this.filters.startDate, -7);
+    this.filters.endDate = this.shiftDateOnly(this.filters.endDate, -7);
     this.loadCalendar();
   }
 
   nextWeek(): void {
-    const start = new Date(this.filters.startDate);
-    start.setDate(start.getDate() + 7);
-    this.filters.startDate = this.getWeekStart(start);
-    this.filters.endDate = this.getWeekEnd(start);
+    this.filters.startDate = this.shiftDateOnly(this.filters.startDate, 7);
+    this.filters.endDate = this.shiftDateOnly(this.filters.endDate, 7);
     this.loadCalendar();
   }
 
@@ -1799,7 +1813,7 @@ export class SchedulesComponent implements OnInit {
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     d.setDate(diff);
-    return d.toISOString().split('T')[0];
+    return this.formatLocalDate(d);
   }
 
   private getWeekEnd(date: Date): string {
@@ -1807,7 +1821,25 @@ export class SchedulesComponent implements OnInit {
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? 0 : 7);
     d.setDate(diff);
-    return d.toISOString().split('T')[0];
+    return this.formatLocalDate(d);
+  }
+
+  private parseDateOnly(value: string): Date {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+  }
+
+  private shiftDateOnly(value: string, days: number): string {
+    const date = this.parseDateOnly(value);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().split('T')[0];
+  }
+
+  private formatLocalDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private getEmptyPatternForm() {

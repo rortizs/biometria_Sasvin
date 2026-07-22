@@ -2,7 +2,7 @@ from datetime import date, time, datetime
 from uuid import UUID
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ExceptionTypeEnum(str, Enum):
@@ -138,6 +138,22 @@ class BulkAssignmentCreate(BaseModel):
     dates: list[date]
     schedule_id: UUID | None = None
     is_day_off: bool = False
+
+
+class BulkAssignmentDelete(BaseModel):
+    employee_ids: list[UUID] = Field(min_length=1)
+    start_date: date
+    end_date: date
+
+    @model_validator(mode="after")
+    def validate_date_range(self):
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be on or before end_date")
+        return self
+
+
+class BulkAssignmentDeleteResponse(BaseModel):
+    deleted_count: int = Field(ge=0)
 
 
 # Calendar View Response

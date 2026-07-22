@@ -1,9 +1,10 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -31,6 +32,8 @@ from app.schemas.schedule import (
     ScheduleExceptionUpdate,
     ScheduleExceptionResponse,
     BulkAssignmentCreate,
+    BulkAssignmentDelete,
+    BulkAssignmentDeleteResponse,
     CalendarResponse,
     EmployeeCalendarRow,
     CalendarDayInfo,
@@ -38,6 +41,7 @@ from app.schemas.schedule import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ==================== SCHEDULE PATTERNS ====================
@@ -321,6 +325,52 @@ async def create_bulk_assignments(
 
     await db.commit()
     return {"created": created_count, "updated": updated_count}
+
+
+@router.delete(
+    "/assignments/bulk",
+    response_model=BulkAssignmentDeleteResponse,
+    tags=["schedules"],
+    responses={403: {"description": "Solo el admin puede eliminar asignaciones"}},
+)
+async def delete_bulk_assignments(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_admin)],
+    delete_in: BulkAssignmentDelete,
+) -> BulkAssignmentDeleteResponse:
+    """Delete only selected employees' date-specific assignments in an inclusive range."""
+    statement = (
+        delete(ScheduleAssignment)
+        .where(
+            ScheduleAssignment.employee_id.in_(delete_in.employee_ids),
+            ScheduleAssignment.assignment_date >= delete_in.start_date,
+            ScheduleAssignment.assignment_date <= delete_in.end_date,
+        )
+        .returning(ScheduleAssignment.id)
+    )
+    try:
+        result = await db.execute(statement)
+        deleted_count = len(result.scalars().all())
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception(
+            "Schedule bulk delete failed for actor_id=%s employee_count=%s",
+            current_user.id,
+            len(delete_in.employee_ids),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to delete assignments",
+        )
+
+    logger.info(
+        "Schedule bulk delete completed for actor_id=%s employee_count=%s deleted_count=%s",
+        current_user.id,
+        len(delete_in.employee_ids),
+        deleted_count,
+    )
+    return BulkAssignmentDeleteResponse(deleted_count=deleted_count)
 
 
 @router.delete(
