@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -96,7 +97,7 @@ La mayoría de endpoints requieren un **JWT Bearer token**.
 
 1. Hacer `POST /api/v1/auth/login` con email y password
 2. Copiar el `access_token` de la respuesta
-3. En Swagger: click en **Authorize** → ingresar `Bearer <token>`
+3. En Swagger (`/api/v1/docs`): click en **Authorize** → ingresar `Bearer <token>`
 4. En Postman/Insomnia: header `Authorization: Bearer <token>`
 
 Los endpoints `POST /attendance/check-in` y `POST /attendance/check-out`
@@ -125,9 +126,9 @@ Si el dispositivo está fuera del radio autorizado, el backend **rechaza** el ma
     },
     openapi_tags=openapi_tags,
     lifespan=lifespan,
-    openapi_url="/api/openapi.json",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
+    openapi_url="/api/v1/openapi.json",
+    docs_url="/api/v1/docs",
+    redoc_url="/api/v1/redoc",
 )
 
 # CORS middleware
@@ -141,6 +142,21 @@ app.add_middleware(
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+
+@app.get("/api/docs", include_in_schema=False)
+async def legacy_docs_redirect():
+    return RedirectResponse(url="/api/v1/docs")
+
+
+@app.get("/api/openapi.json", include_in_schema=False)
+async def legacy_openapi_json():
+    return JSONResponse(app.openapi())
+
+
+@app.get("/api/redoc", include_in_schema=False)
+async def legacy_redoc_redirect():
+    return RedirectResponse(url="/api/v1/redoc")
 
 
 @app.get("/health")
@@ -158,5 +174,5 @@ async def root():
     return {
         "app": settings.app_name,
         "version": "1.0.0",
-        "docs": "/api/docs",
+        "docs": "/api/v1/docs",
     }
