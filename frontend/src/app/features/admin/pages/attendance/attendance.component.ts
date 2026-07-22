@@ -207,7 +207,7 @@ interface AttendanceSummary {
                     <td class="employee-cell">
                       <span class="employee-name">{{ record.employee_name }}</span>
                     </td>
-                    <td>{{ record.record_date | date: 'dd/MM/yyyy' }}</td>
+                    <td>{{ formatRecordDate(record.record_date) }}</td>
                     <td>
                       @if (record.check_in) {
                         <span class="time-badge check-in">{{ record.check_in | date: 'HH:mm' }}</span>
@@ -278,7 +278,7 @@ interface AttendanceSummary {
                   <div class="mobile-card-body">
                     <div class="mobile-field">
                       <span class="mobile-label">Fecha</span>
-                      <span class="mobile-value">{{ record.record_date | date: 'dd/MM/yyyy' }}</span>
+                      <span class="mobile-value">{{ formatRecordDate(record.record_date) }}</span>
                     </div>
                     <div class="mobile-field">
                       <span class="mobile-label">Entrada</span>
@@ -986,7 +986,7 @@ export class AttendanceComponent implements OnInit {
     const deptId = this.filters.departmentId;
 
     if (!deptId) {
-      return records;
+      return this.sortAttendanceRecords(records);
     }
 
     // Get employee IDs for selected department
@@ -996,7 +996,9 @@ export class AttendanceComponent implements OnInit {
         .map(emp => emp.id)
     );
 
-    return records.filter(record => deptEmployeeIds.has(record.employee_id));
+    return this.sortAttendanceRecords(
+      records.filter(record => deptEmployeeIds.has(record.employee_id))
+    );
   });
 
   // Computed: summary statistics
@@ -1146,6 +1148,16 @@ export class AttendanceComponent implements OnInit {
     return `In ${checkIn} / Out ${checkOut}`;
   }
 
+  formatRecordDate(dateStr: string): string {
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (dateOnly) {
+      const [, year, month, day] = dateOnly;
+      return `${day}/${month}/${year}`;
+    }
+
+    return this.formatDateTime(dateStr);
+  }
+
   exportToCSV(): void {
     const records = this.filteredAttendance();
     if (records.length === 0) return;
@@ -1169,7 +1181,7 @@ export class AttendanceComponent implements OnInit {
     // CSV rows
     const rows = records.map(record => [
       record.employee_name,
-      this.formatDate(record.record_date),
+      this.formatRecordDate(record.record_date),
       record.check_in ? this.formatTime(record.check_in) : '-',
       record.check_out ? this.formatTime(record.check_out) : '-',
       this.calculateHoursWorked(record),
@@ -1204,7 +1216,29 @@ export class AttendanceComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 
-  private formatDate(dateStr: string): string {
+  private sortAttendanceRecords(records: AttendanceRecord[]): AttendanceRecord[] {
+    return [...records].sort((a, b) => {
+      const dateComparison = a.record_date.localeCompare(b.record_date);
+      if (dateComparison !== 0) return dateComparison;
+
+      const employeeComparison = a.employee_name.localeCompare(b.employee_name, 'es');
+      if (employeeComparison !== 0) return employeeComparison;
+
+      const checkInComparison = this.compareOptionalValues(a.check_in, b.check_in);
+      if (checkInComparison !== 0) return checkInComparison;
+
+      return a.id.localeCompare(b.id);
+    });
+  }
+
+  private compareOptionalValues(a: string | null, b: string | null): number {
+    if (a === b) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return a.localeCompare(b);
+  }
+
+  private formatDateTime(dateStr: string): string {
     const date = new Date(dateStr);
     return date.toLocaleDateString('es-AR', {
       day: '2-digit',
