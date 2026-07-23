@@ -8,7 +8,8 @@
     "build:prod": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "test:index-language": "node scripts/verify-index-language.mjs"
+    "test:index-language": "node scripts/verify-index-language.mjs",
+    "test:e2e:fixtures": "playwright test e2e/fixtures"
   },
   "prettier": {
     "printWidth": 100,
@@ -45,6 +46,7 @@
     "zone.js": "~0.15.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "@angular/build": "20.3.17",
     "@angular/cli": "20.3.17",
     "@angular/compiler-cli": "20.3.17",
