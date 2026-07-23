@@ -1,5 +1,5 @@
 import { type ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { signal } from '@angular/core';
 
 import { KioskComponent } from './kiosk.component';
@@ -11,6 +11,7 @@ import { PlatformService } from '../../core/services/platform.service';
 import { SwUpdate } from '@angular/service-worker';
 import { provideRouter } from '@angular/router';
 import { LivenessService } from '../../core/services/liveness.service';
+import type { AttendanceRecord } from '../../core/models/attendance.model';
 
 describe('KioskComponent', () => {
   let fixture: ComponentFixture<KioskComponent>;
@@ -253,6 +254,64 @@ describe('KioskComponent', () => {
       longitude: -89.9,
     });
     expect(component.mode()).toBe('success');
+  });
+
+  it('should present a successful check-in with entry copy and green semantics', async () => {
+    geolocationService.isSupported.and.returnValue(true);
+    geolocationService.getCurrentPosition.and.returnValue(
+      of({ latitude: 14.3, longitude: -89.9, accuracy: 5 }),
+    );
+    fixture.detectChanges();
+
+    await component.scan();
+    fixture.detectChanges();
+
+    const resultPanel = fixture.nativeElement.querySelector('.result-panel');
+    expect(resultPanel.textContent).toContain('Entrada registrada');
+    expect(resultPanel.classList).toContain('check-in');
+    expect(getComputedStyle(resultPanel).borderTopColor).toBe('rgb(34, 197, 94)');
+    expect(resultPanel.getAttribute('role')).toBe('status');
+    expect(
+      resultPanel.querySelector('.result-icon').getAttribute('aria-label').toLowerCase(),
+    ).toContain('entrada');
+  });
+
+  it('should preserve checkout presentation when the selected action changes before the response', async () => {
+    const checkoutResult$ = new Subject<AttendanceRecord>();
+    attendanceService.checkOut.and.returnValue(checkoutResult$);
+    geolocationService.isSupported.and.returnValue(true);
+    geolocationService.getCurrentPosition.and.returnValue(
+      of({ latitude: 14.3, longitude: -89.9, accuracy: 5 }),
+    );
+    fixture.detectChanges();
+    component.setCheckIn(false);
+
+    await component.scan();
+    component.setCheckIn(true);
+    checkoutResult$.next({
+      id: '2',
+      employee_id: 'e1',
+      employee_name: 'Juan Pérez',
+      record_date: '2026-04-27',
+      check_in: '2026-04-27T13:00:00Z',
+      check_out: '2026-04-27T22:00:00Z',
+      status: 'present',
+      confidence: 0.98,
+      geo_validated: true,
+      check_out_distance_meters: 3,
+    });
+    fixture.detectChanges();
+
+    const resultPanel = fixture.nativeElement.querySelector('.result-panel');
+    expect(resultPanel.textContent).toContain('Salida registrada');
+    expect(resultPanel.textContent).toContain('Salida:');
+    expect(resultPanel.classList).toContain('check-out');
+    expect(getComputedStyle(resultPanel).borderTopColor).toBe('rgb(59, 130, 246)');
+    expect(resultPanel.classList).not.toContain('warning');
+    expect(resultPanel.classList).not.toContain('error');
+    expect(
+      resultPanel.querySelector('.result-icon').getAttribute('aria-label').toLowerCase(),
+    ).toContain('salida');
   });
 
   it('should translate outside-perimeter backend errors and preserve the distance', async () => {
