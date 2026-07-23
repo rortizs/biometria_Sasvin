@@ -54,6 +54,16 @@ export interface BulkScheduleAssignment {
   is_day_off?: boolean;
 }
 
+export interface BulkScheduleAssignmentDelete {
+  employee_ids: string[];
+  start_date: string;
+  end_date: string;
+}
+
+export interface BulkScheduleAssignmentDeleteResponse {
+  deleted_count: number;
+}
+
 // Schedule Exception - Vacations, holidays, sick leave, etc.
 // Extended types based on SIA system
 export type ExceptionType =

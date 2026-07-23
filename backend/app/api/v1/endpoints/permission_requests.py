@@ -266,6 +266,18 @@ async def approve_permission_request(
             request_id=str(permission_request.id),
         )
 
+    elif permission_request.status == PermissionRequestStatus.approved:
+        _allowed = {UserRole.director, UserRole.admin}
+        if current_user.role not in _allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permisos insuficientes: se requiere rol director o admin",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La solicitud ya fue aprobada. Indique al colaborador que ingrese una nueva solicitud.",
+        )
+
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

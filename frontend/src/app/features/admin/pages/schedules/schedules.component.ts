@@ -155,11 +155,11 @@ export function getAssignmentDates(
 
       <!-- Week Navigation -->
       <section class="week-navigation">
-        <button class="nav-btn" (click)="previousWeek()">
+        <button class="nav-btn" [disabled]="deleting()" (click)="previousWeek()">
           <span>&#8592;</span> Semana Anterior
         </button>
         <span class="week-label">{{ weekLabel() }}</span>
-        <button class="nav-btn" (click)="nextWeek()">
+        <button class="nav-btn" [disabled]="deleting()" (click)="nextWeek()">
           Semana Siguiente <span>&#8594;</span>
         </button>
       </section>
@@ -262,10 +262,16 @@ export function getAssignmentDates(
             <button class="btn btn-warning" (click)="showExceptionModal.set(true)">
               Crear Excepcion
             </button>
+            <button class="btn btn-danger" [disabled]="deleting()" (click)="deleteSelectedAssignments()">
+              {{ deleting() ? 'Eliminando...' : 'Eliminar Asignaciones' }}
+            </button>
             <button class="btn btn-outline" (click)="clearSelection()">
               Limpiar Seleccion
             </button>
           </div>
+          @if (deleteError()) {
+            <p class="delete-error" role="alert">{{ deleteError() }}</p>
+          }
         </section>
       }
 
@@ -591,6 +597,16 @@ export function getAssignmentDates(
 
     .btn-warning:hover {
       background: #d97706;
+    }
+
+    .btn-danger {
+      background: #dc2626;
+      color: white;
+    }
+
+    .delete-error {
+      margin: 0.75rem 0 0;
+      color: #fee2e2;
     }
 
     .btn-outline {
@@ -1252,6 +1268,8 @@ export class SchedulesComponent implements OnInit {
   readonly loading = signal(false);
   readonly selectedEmployees = signal<string[]>([]);
   readonly selectedCells = signal<Map<string, Set<string>>>(new Map());
+  readonly deleting = signal(false);
+  readonly deleteError = signal<string | null>(null);
   private calendarLoadToken = 0;
 
   // Modal states
@@ -1539,6 +1557,45 @@ export class SchedulesComponent implements OnInit {
   clearSelection(): void {
     this.selectedEmployees.set([]);
     this.selectedCells.set(new Map());
+  }
+
+  deleteSelectedAssignments(): void {
+    if (this.deleting()) {
+      return;
+    }
+
+    const employeeIds = [...this.selectedEmployees()];
+    const range = this.calendarRange();
+    if (employeeIds.length === 0) {
+      return;
+    }
+
+    const confirmed = confirm(
+      `¿Eliminar las asignaciones de ${employeeIds.length} empleado(s) del ${range.startDate} al ${range.endDate}?`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    this.deleting.set(true);
+    this.deleteError.set(null);
+    this.scheduleService.deleteBulkAssignments({
+      employee_ids: employeeIds,
+      start_date: range.startDate,
+      end_date: range.endDate,
+    }).subscribe({
+      next: () => {
+        this.deleting.set(false);
+        this.clearSelection();
+        this.loadCalendar();
+      },
+      error: (err) => {
+        this.deleting.set(false);
+        this.deleteError.set(
+          err.error?.detail || 'No se pudieron eliminar las asignaciones. Intente nuevamente.'
+        );
+      },
+    });
   }
 
   // Cell Styling

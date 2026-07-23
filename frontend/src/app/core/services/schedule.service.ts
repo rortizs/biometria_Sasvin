@@ -8,6 +8,8 @@ import {
   ScheduleAssignment,
   ScheduleAssignmentCreate,
   BulkScheduleAssignment,
+  BulkScheduleAssignmentDelete,
+  BulkScheduleAssignmentDeleteResponse,
   ScheduleException,
   ScheduleExceptionCreate,
   CalendarResponse,
@@ -67,6 +69,15 @@ export class ScheduleService {
 
   deleteAssignment(id: string): Observable<void> {
     return this.api.delete<void>(`/schedules/assignments/${id}`);
+  }
+
+  deleteBulkAssignments(
+    payload: BulkScheduleAssignmentDelete
+  ): Observable<BulkScheduleAssignmentDeleteResponse> {
+    return this.api.delete<BulkScheduleAssignmentDeleteResponse>(
+      '/schedules/assignments/bulk',
+      payload
+    );
   }
 
   // Schedule Exceptions
