@@ -4,11 +4,12 @@
 
 This spec defines backend-enforced attendance and academic-data access boundaries for teachers, students, parents, and administrative roles.
 
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Teacher Attendance Scope
 
-The system MUST allow `CATEDRATICO` actors to mark or manage attendance only for assigned classes, schedules, students, or equivalent teacher-scoped resources.
+The system MUST allow `CATEDRATICO` actors to mark or manage attendance only for assigned classes, schedules, students, or equivalent teacher-scoped resources, and MUST allow `CATEDRATICO` actors to register their own attendance check-in/check-out as employees.
+(Previously: scoped only to marking attendance for assigned classes/students; did not cover the teacher's own attendance registration.)
 
 #### Scenario: Teacher marks assigned attendance
 
@@ -23,6 +24,50 @@ The system MUST allow `CATEDRATICO` actors to mark or manage attendance only for
 - AND the target attendance context is not assigned to that teacher
 - WHEN the actor sends a direct API request to mark attendance
 - THEN the backend MUST deny the request
+
+#### Scenario: CATEDRATICO marks own attendance
+
+- GIVEN an authenticated actor has `CATEDRATICO`
+- WHEN the actor registers their own check-in or check-out attendance record
+- THEN the backend MUST allow the operation when it targets the actor's own employee identity
+- AND the backend MUST deny the operation if it targets a different employee's attendance record
+
+### Requirement: Administrative Attendance Access
+
+The system MUST allow `DECANO`, `DUEÑO`, `DIRECTOR`, and `COORDINADOR` read-only access to attendance reports, and MUST allow `SECRETARIA` to create or update employee records only for employees whose position maps to canonical role `CATEDRATICO`, all according to assigned backend permissions and object-level constraints.
+(Previously: granted `DIRECTOR`, `ADMINISTRATIVO`, `DECANO`, and `DUEÑO` combined attendance-and-employee-module access without a read-only/write split.)
+
+#### Scenario: Business and academic roles access read-only attendance reports
+
+- GIVEN an authenticated actor has `DECANO`, `DUEÑO`, `DIRECTOR`, or `COORDINADOR`
+- WHEN the actor requests an attendance report covered by their permissions
+- THEN the backend MUST allow read-only access when object-level constraints pass
+- AND the backend MUST deny any create, update, delete, or export action on that report
+
+#### Scenario: SECRETARIA manages catedrático employee records
+
+- GIVEN an authenticated actor has `SECRETARIA`
+- AND the target employee's position maps to canonical role `CATEDRATICO`
+- WHEN the actor creates or updates that employee record
+- THEN the backend MUST allow the operation when object-level constraints pass
+
+#### Scenario: SECRETARIA cannot manage non-teaching employee records
+
+- GIVEN an authenticated actor has `SECRETARIA`
+- AND the target employee's position does not map to canonical role `CATEDRATICO`
+- WHEN the actor sends a direct API request to create or update that employee record
+- THEN the backend MUST deny the request
+
+#### Scenario: Administrative actor cannot bypass object scope
+
+- GIVEN an authenticated actor has `DECANO`, `DUEÑO`, `DIRECTOR`, `COORDINADOR`, or `SECRETARIA`
+- AND the target object is outside the actor's permitted scope
+- WHEN the actor sends a direct API request for the object
+- THEN the backend MUST deny the request
+
+## Requirements (Unchanged)
+
+Carried forward as-is from the prior revision of this spec; not affected by this design revision.
 
 ### Requirement: Student Attendance Access
 
@@ -62,35 +107,6 @@ The system MUST allow `PADRES` actors read-only access only to attendance and pe
 
 - GIVEN an authenticated actor has `PADRES`
 - WHEN the actor sends a direct API request to create, update, delete, or validate attendance
-- THEN the backend MUST deny the request
-
-### Requirement: Administrative Attendance Access
-
-The system MUST allow `DIRECTOR`, `ADMINISTRATIVO`, `DECANO`, and `DUEÑO` access to attendance and employee modules only according to assigned backend permissions and object-level constraints.
-
-#### Scenario: Director accesses permitted attendance module
-
-- GIVEN an authenticated actor has `DIRECTOR`
-- WHEN the actor requests an attendance or employee resource covered by `DIRECTOR` permissions
-- THEN the backend MUST allow the request when object-level constraints pass
-
-#### Scenario: Administrativo accesses permitted operational attendance module
-
-- GIVEN an authenticated actor has `ADMINISTRATIVO`
-- WHEN the actor requests an attendance or employee resource covered by `ADMINISTRATIVO` permissions
-- THEN the backend MUST allow the request when object-level constraints pass
-
-#### Scenario: Business top roles access permitted attendance reports
-
-- GIVEN an authenticated actor has `DECANO` or `DUEÑO`
-- WHEN the actor requests a business attendance report covered by their permissions
-- THEN the backend MUST allow the request when object-level constraints pass
-
-#### Scenario: Administrative actor cannot bypass object scope
-
-- GIVEN an authenticated actor has `DIRECTOR`, `ADMINISTRATIVO`, `DECANO`, or `DUEÑO`
-- AND the target object is outside the actor's permitted scope
-- WHEN the actor sends a direct API request for the object
 - THEN the backend MUST deny the request
 
 ### Requirement: Attendance Backend Enforcement

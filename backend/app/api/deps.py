@@ -12,7 +12,7 @@ from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.role import Role
 from app.models.role_permission import UserRoleAssignment
-from app.models.user import User, UserRole, canonical_role_from_value
+from app.models.user import ASSIGNABLE_ROLE_VALUES, User, UserRole, canonical_role_from_value
 
 settings = get_settings()
 
@@ -85,6 +85,8 @@ def ensure_can_assign_role(user: User, target_role: str | UserRole, configured_s
     if canonical == UserRole.ADMIN:
         raise _permission_denied()
     if canonical == UserRole.DEV and not is_bootstrap_admin(user, configured_settings):
+        raise _permission_denied()
+    if canonical is None or canonical.value not in ASSIGNABLE_ROLE_VALUES:
         raise _permission_denied()
 
 

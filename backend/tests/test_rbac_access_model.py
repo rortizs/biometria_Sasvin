@@ -17,7 +17,12 @@ from app.api.deps import (
 )
 from app.api import deps
 from app.core.config import Settings
-from app.models.user import CANONICAL_ROLE_VALUES, UserRole, canonical_role_from_value
+from app.models.user import (
+    ASSIGNABLE_ROLE_VALUES,
+    CANONICAL_ROLE_VALUES,
+    UserRole,
+    canonical_role_from_value,
+)
 from app.schemas.role import RoleCreate, UserRoleAssign
 from app.schemas.user import UserCreate, UserUpdate, UserPasswordChange
 from app.api.v1.endpoints import auth as auth_endpoint
@@ -34,6 +39,8 @@ CANONICAL_ROLES = {
     "DUEÑO",
     "DIRECTOR",
     "ADMINISTRATIVO",
+    "COORDINADOR",
+    "SECRETARIA",
     "CATEDRATICO",
     "ESTUDIANTE",
     "PADRES",
@@ -121,14 +128,35 @@ def test_user_role_enum_exposes_only_canonical_values_with_legacy_aliases():
     [
         ("admin", UserRole.ADMIN),
         ("director", UserRole.DIRECTOR),
-        ("coordinador", UserRole.ADMINISTRATIVO),
-        ("secretaria", UserRole.ADMINISTRATIVO),
-        ("supervisor", UserRole.ADMINISTRATIVO),
+        ("coordinador", UserRole.COORDINADOR),
+        ("secretaria", UserRole.SECRETARIA),
+        ("supervisor", UserRole.COORDINADOR),
         ("catedratico", UserRole.CATEDRATICO),
     ],
 )
 def test_known_legacy_roles_map_to_canonical_roles(legacy_role, expected):
     assert canonical_role_from_value(legacy_role) is expected
+
+
+def test_legacy_coordinador_no_longer_resolves_to_administrativo():
+    resolved = canonical_role_from_value("coordinador")
+
+    assert resolved is UserRole.COORDINADOR
+    assert resolved is not UserRole.ADMINISTRATIVO
+
+
+def test_legacy_secretaria_no_longer_resolves_to_administrativo():
+    resolved = canonical_role_from_value("secretaria")
+
+    assert resolved is UserRole.SECRETARIA
+    assert resolved is not UserRole.ADMINISTRATIVO
+
+
+def test_administrativo_is_excluded_from_assignable_role_values():
+    assert UserRole.ADMINISTRATIVO.value in CANONICAL_ROLE_VALUES
+    assert UserRole.ADMINISTRATIVO.value not in ASSIGNABLE_ROLE_VALUES
+    assert UserRole.COORDINADOR.value in ASSIGNABLE_ROLE_VALUES
+    assert UserRole.SECRETARIA.value in ASSIGNABLE_ROLE_VALUES
 
 
 def test_unknown_role_and_missing_permission_fail_closed():
@@ -506,6 +534,51 @@ async def test_users_update_denies_admin_role_assignment_by_bootstrap_actor():
 
 
 @pytest.mark.asyncio
+async def test_users_update_denies_administrativo_role_assignment():
+    settings = _settings("root@example.com")
+    actor = _user("dean@example.com", UserRole.DECANO)
+    target = _user("teacher@example.com", UserRole.CATEDRATICO)
+    db = _mock_db(_db_result(value=target))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await users_endpoint.update_user(
+            db,
+            actor,
+            target.id,
+            UserUpdate(role=UserRole.ADMINISTRATIVO),
+            settings,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert target.role is UserRole.CATEDRATICO
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auth_register_denies_administrativo_role():
+    settings = _settings("root@example.com")
+    actor = _user("root@example.com", UserRole.ADMIN)
+    db = _mock_db(_db_result(value=None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_endpoint.register(
+            db,
+            actor,
+            UserCreate(
+                email="new-administrativo@miumg.edu.gt",
+                password="ChangeMe123!",
+                full_name="New Administrativo",
+                role=UserRole.ADMINISTRATIVO,
+            ),
+            settings,
+        )
+
+    assert exc_info.value.status_code == 403
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_roles_create_dev_is_reserved_to_bootstrap_admin():
     settings = _settings("root@example.com")
     actor = _user("dev@example.com", UserRole.DEV)
@@ -794,7 +867,13 @@ def test_canonical_migration_seeds_roles_permissions_and_legacy_mapping():
 
     role_names = {role["name"] for role in migration.CANONICAL_ROLES}
 
-    assert role_names == CANONICAL_ROLES
+    # This migration (202606101200) is frozen history: it predates the
+    # COORDINADOR/SECRETARIA split and must not be edited (the split's own
+    # migration stacks on top of it). Its seeded role set therefore still
+    # matches the pre-split canonical roles, not the current module-level
+    # CANONICAL_ROLES.
+    pre_split_roles = CANONICAL_ROLES - {"COORDINADOR", "SECRETARIA"}
+    assert role_names == pre_split_roles
     assert "users.manage" in {permission[0] for permission in migration.CANONICAL_PERMISSIONS}
     assert migration.LEGACY_ROLE_MAPPING["coordinador"] == "ADMINISTRATIVO"
     assert migration.LEGACY_ROLE_MAPPING["catedratico"] == "CATEDRATICO"

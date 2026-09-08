@@ -4,26 +4,27 @@
 
 | Field | Value |
 |-------|-------|
-| Estimated changed lines | 900-1,400 |
+| Estimated changed lines | 1,600-2,300 (Phase 3: ~950-1,300; Phase 4: ~650-1,000) |
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
-| Suggested split | PR1 foundation -> PR2 RBAC APIs -> PR3 workflow/attendance -> PR4 Angular |
-| Delivery strategy | auto-forecast |
-| Chain strategy | feature-branch-chain |
+| Suggested split | PR1 (merged) -> PR2 `#32` (open) -> PR3 migration+scope+backend enforcement -> PR4 permission-request workflow -> PR5 Angular |
+| Delivery strategy | auto-chain |
+| Chain strategy | pending (maintainer decision; feature-branch-chain assumed) |
 
-Decision needed before apply: No
+Decision needed before apply: Yes
 Chained PRs recommended: Yes
-Chain strategy: feature-branch-chain
+Chain strategy: pending
 400-line budget risk: High
 
 ### Suggested Work Units
 
-| Unit | Goal | Likely PR | Notes |
-|------|------|-----------|-------|
-| 1 | Canonical roles, migration, bootstrap recovery, helpers | PR1 | Base = tracker; run `cd backend && pytest` |
-| 2 | Users/Roles/Permissions enforcement | PR2 | Base = PR1; include direct API denials |
-| 3 | Permission requests + attendance object access | PR3 | Base = PR2; include object-scope tests |
-| 4 | Angular permission visibility | PR4 | Base = PR3; run `cd frontend && npm test -- --watch=false` |
+| Unit | Goal | Likely PR | Focused test command | Runtime harness | Rollback boundary |
+|------|------|-----------|-----------------------|------------------|--------------------|
+| 1 | Canonical roles, migration, bootstrap recovery, helpers | PR1 (merged) | `cd backend && pytest tests/test_rbac_access_model.py` | N/A — merged, no re-run needed | n/a, already shipped |
+| 2 | Users/Roles/Permissions enforcement | PR2 `#32` (open) | `cd backend && pytest tests/test_rbac_access_model.py` | N/A — under review | n/a, already open |
+| 3 | Role split, `user_scope_assignments`, `positions.canonical_role`, scope admin surface, coarse-gate replacement (tasks 3.1-3.12, 3.15) | PR3 | `cd backend && pytest tests/test_rbac_access_model.py tests/test_user_scope_assignment.py` | `alembic upgrade head && alembic downgrade -1` against a seeded staging DB | revert PR3 branch; migration downgrade restores `ADMINISTRATIVO`-only state |
+| 4 | Two-stage permission-request state machine (tasks 3.13-3.14) | PR4 | `cd backend && pytest tests/test_permission_requests.py` | Direct `httpx` calls exercising stage-1/stage-2 transitions against seeded scope rows | revert PR4 branch; PR3 endpoints/model unaffected |
+| 5 | Angular role/permission model, guards, scope admin UI (Phase 4) | PR5 | `cd frontend && npm test -- --watch=false` | `ng serve` manual walkthrough of coordinador/secretaría/director views | revert PR5 branch; backend enforcement stays authoritative |
 
 ## Phase 1: Foundation / Migration
 
@@ -50,17 +51,34 @@ Chain strategy: feature-branch-chain
 - [x] 2.3 RED/GREEN: test/enforce DEV assignment; only bootstrap `ADMIN` may create or assign `DEV`.
 - [x] 2.4 RED/GREEN: test/update `backend/app/api/v1/endpoints/roles.py` and `permissions.py` for DEV-only RBAC internals.
 
-## Phase 3: Workflow / Attendance Enforcement
+## Phase 3: Role Split, Scope Model, Backend Enforcement
 
-- [ ] 3.1 RED/GREEN: test/update `permission_requests.py` for owner/reviewer visibility, approval denial, and audit-safe responses.
-- [ ] 3.2 RED/GREEN: test/update `attendance.py` for teacher, student, parent, admin, and missing-relationship boundaries.
-- [ ] 3.3 RED/GREEN: test/update employees, faces, locations, schedules, and settings endpoints to use permission dependencies.
+- [x] 3.1 RED: update `backend/tests/test_rbac_access_model.py` legacy-mapping parametrize (lines ~124-126: `coordinador`→`COORDINADOR`, `secretaria`→`SECRETARIA`, `supervisor`→`COORDINADOR`) and `CANONICAL_ROLES`. Spec: rbac-access-model "Known legacy roles map to split canonical roles".
+- [x] 3.2 GREEN: `backend/app/models/user.py` — add `COORDINADOR`/`SECRETARIA` enum values + legacy aliases, deprecate `ADMINISTRATIVO` as non-assignable, retarget `LEGACY_ROLE_MAPPING["coordinador"/"secretaria"/"supervisor"]` (D1/D2). Spec: "Canonical Roles", "Deprecated ADMINISTRATIVO is not assignable through any API".
+- [x] 3.2b RED/GREEN: enforce `ASSIGNABLE_ROLE_VALUES` in `ensure_can_assign_role()` (`backend/app/api/deps.py`) so `ADMINISTRATIVO` cannot be assigned via any users/auth endpoint; add direct-API denial tests for `PATCH /users/{id}` (`users_endpoint.update_user`) and `POST /auth/register` (`auth_endpoint.register`) in `backend/tests/test_rbac_access_model.py`. Spec: "Canonical Roles" — "Deprecated ADMINISTRATIVO is not assignable through any API". Standalone follow-up closing the CRITICAL gap flagged in `verify-pr3-slice1-report.md`.
+- [ ] 3.3 RED: create `backend/tests/test_user_scope_assignment.py` — CHECK constraint (exactly one of department/location/director target), unique index on the triple, and a reclassification-ladder unit test (surviving `roles.name` → `positions.canonical_role` → fallback `COORDINADOR` + audit row, no scope). Spec: "Organizational Scope Assignment", "Ambiguous migrated ADMINISTRATIVO user lands on unscoped COORDINADOR and is audited".
+- [ ] 3.4 GREEN: create `backend/app/models/user_scope_assignment.py` (`UserScopeAssignment`, D4) and add `canonical_role` column to `backend/app/models/position.py` (D6).
+- [ ] 3.5 GREEN: create `backend/alembic/versions/<rev>_split_administrativo_and_scopes.py` stacking on `202606101200` — enum values, D3 reclassification ladder + audit table row, `user_scope_assignments`, `positions.canonical_role`, new permission rows (`user_scopes.manage`, `employees.manage.catedratico`, `attendance.mark.self`, stage permissions), reversible downgrade merging `COORDINADOR`/`SECRETARIA` back to `ADMINISTRATIVO`. Spec: "Legacy Role Migration Compatibility".
+- [ ] 3.6 RED/GREEN: narrow `LEGACY_ADMIN_FALLBACK_ALLOWED_ROLES` to `{DECANO, DUEÑO}` in `backend/app/core/config.py` (D9). **Behavior change to shipped Phase-1 B3/B4 fallback** — add a regression test proving `DIRECTOR`/`ADMINISTRATIVO` are rejected as fallback targets.
+- [ ] 3.7 RED/GREEN: add `resolve_user_scopes`, `assert_request_scope`, `require_teacher_position` to `backend/app/api/deps.py`; mark `get_current_secretaria_or_above`/`get_current_coordinador_or_above`/`get_current_active_admin` deprecated (D10). Spec: "Missing scope assignment fails closed".
+- [ ] 3.8 RED/GREEN: create `backend/app/api/v1/endpoints/user_scopes.py` — `user_scopes.manage`-gated CRUD for coordinador/director facultad-sede and secretaría-director assignments; register router. Spec: "Coordinador/Secretaría scope assignment is persisted", "Only authorized actor manages scope assignments".
+- [ ] 3.9 RED/GREEN: `backend/app/api/v1/endpoints/employees.py` — replace `get_current_secretaria_or_above` with `require_permission("employees.manage.catedratico")` + `require_teacher_position`. Spec: "SECRETARIA creates/edits catedrático employees only", "SECRETARIA cannot manage non-teaching employees".
+- [ ] 3.10 RED/GREEN: `backend/app/api/v1/endpoints/schedules.py`, `departments.py`, `positions.py`, `locations.py` — replace `get_current_coordinador_or_above`/`get_current_secretaria_or_above` with `require_permission` + `assert_request_scope`; `COORDINADOR`/`DIRECTOR` read-only. Spec: "Module Access Boundaries" (DIRECTOR/COORDINADOR scenarios).
+- [ ] 3.11 RED/GREEN: `backend/app/api/v1/endpoints/settings.py` and `faces.py` — replace `get_current_active_admin` with `require_permission`; deny `DECANO`/`DUEÑO` writes. Spec: "Business Top Role Boundaries — DECANO and DUEÑO cannot perform operational write actions".
+- [ ] 3.12 RED/GREEN: `backend/app/api/v1/endpoints/attendance.py` — `DECANO`/`DUEÑO`/`DIRECTOR`/`COORDINADOR` read-only reports (deny export/edit); `CATEDRATICO` self check-in via `attendance.mark.self` restricted to own `employee_id`; `SECRETARIA` catedrático-scoped employee writes. Spec: attendance-access-control "Teacher Attendance Scope", "Administrative Attendance Access".
+- [ ] 3.13 RED/GREEN: `backend/app/api/v1/endpoints/permission_requests.py` two-stage transitions — stage 1 scoped `COORDINADOR` approve/reject (`pending`→`coordinator_approved`/`rejected(stage=coordinator)`); stage 2 assigned `SECRETARIA` approve/reject requiring non-empty justification (422 if missing) (`coordinator_approved`→`approved`/`rejected(stage=director)`); `DIRECTOR` denied any transition. Spec: "Stage 1 Coordinator Review", "Stage 2 Secretaría Review", "Director Notification Visibility".
+- [ ] 3.14 RED/GREEN: `permission_requests.py` visibility + creation — restrict list/detail to owner, scoped `COORDINADOR`, scoped `DIRECTOR` (read-only), assigned `SECRETARIA`, `DEV`/bootstrap `ADMIN`; deny `DECANO`/`DUEÑO`; `CATEDRATICO` may only create for own `employee_id`. Spec: "Permission Request Visibility", "Permission Request Creation".
+- [ ] 3.15 RED/GREEN: cross-scope denial tests — `COORDINADOR`/`SECRETARIA` acting on a resource outside their assigned facultad/sede/director across `employees`, `permission_requests`, `attendance`. Spec: "Cross-scope denial tests cover organizational boundaries".
 
 ## Phase 4: Frontend Permission Visibility
 
-- [ ] 4.1 RED/GREEN: update tests/models in `frontend/src/app/core/models/{user,role}.model.ts` for roles, permissions, modules.
-- [ ] 4.2 RED/GREEN: test/update `auth.service.ts`, `auth.guard.ts`, and `app.routes.ts` for `data.permission`.
-- [ ] 4.3 RED/GREEN: test/update admin dashboard/users/roles pages for backend-driven visibility and role/permission separation.
+- [ ] 4.1 RED/GREEN: `frontend/src/app/core/models/user.model.ts` and `role.model.ts` — replace legacy lowercase `UserRole` union with canonical roles (incl. `coordinador`/`secretaria`), add `UserScopeAssignment` model. Spec: rbac-access-model "Canonical Roles".
+- [ ] 4.2 RED/GREEN: `frontend/src/app/core/models/permission-request.model.ts` — add stage fields (`coordinator_approved`, `rejection_stage`, `director_notes`/justification) matching the two-stage state machine. Spec: permission-request-workflow "Stage 1/2 Coordinator/Secretaría Review".
+- [ ] 4.3 RED/GREEN: `auth.service.ts`, `auth.guard.ts`, `app.routes.ts` — route guards keyed on `data.permission` for `user_scopes.manage`, `permission_requests.approve.stage1/2`, `attendance.mark.self`.
+- [ ] 4.4 RED/GREEN: `frontend/src/app/features/admin/pages/permission-requests/permission-requests.component.ts` — stage-aware approve/reject actions, mandatory justification field for stage 2, read-only view for `DIRECTOR`.
+- [ ] 4.5 RED/GREEN: `frontend/src/app/features/admin/pages/attendance/attendance.component.ts` — hide export/edit actions for `COORDINADOR`, keep read-only reporting for `DECANO`/`DUEÑO`/`DIRECTOR`/`COORDINADOR`.
+- [ ] 4.6 RED/GREEN: create `frontend/src/app/features/admin/pages/user-scopes/user-scopes.component.ts` — admin UI to assign `COORDINADOR`/`DIRECTOR` to facultad/sede and `SECRETARIA` to `DIRECTOR`, wired to `user_scopes.manage`.
+- [ ] 4.7 RED/GREEN: `frontend/src/app/features/admin/pages/employees/employees.component.ts` and `dashboard/dashboard.component.ts` — restrict `SECRETARIA` employee create/edit UI to catedrático positions; hide non-reporting widgets for `DECANO`/`DUEÑO`.
 
 ## Phase 5: Verification / Cleanup
 
