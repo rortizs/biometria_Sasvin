@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_active_admin, get_current_secretaria_or_above
+from app.api.deps import get_db, get_current_user, require_permission
 from app.models.department import Department
 from app.models.user import User
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
@@ -20,11 +20,12 @@ router = APIRouter()
 )
 async def list_departments(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Department]:
-    """Listar facultades y departamentos. No requiere autenticación."""
+    """Listar facultades y departamentos. Requiere autenticación."""
     query = select(Department)
 
     if active_only:
@@ -46,9 +47,10 @@ async def list_departments(
 )
 async def get_department(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     department_id: UUID,
 ) -> Department:
-    """Obtener un departamento por su UUID."""
+    """Obtener un departamento por su UUID. Requiere autenticación."""
     result = await db.execute(select(Department).where(Department.id == department_id))
     department = result.scalar_one_or_none()
 
@@ -72,10 +74,10 @@ async def get_department(
 )
 async def create_department(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("departments.create"))],
     department_in: DepartmentCreate,
 ) -> Department:
-    """Crear un nuevo departamento o facultad. Requiere rol secretaria o superior."""
+    """Crear un nuevo departamento o facultad. Requiere el permiso `departments.create`."""
     department = Department(**department_in.model_dump())
     db.add(department)
     await db.commit()
@@ -94,11 +96,11 @@ async def create_department(
 )
 async def update_department(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("departments.update"))],
     department_id: UUID,
     department_in: DepartmentUpdate,
 ) -> Department:
-    """Actualizar un departamento parcialmente. Requiere rol secretaria o superior."""
+    """Actualizar un departamento parcialmente. Requiere el permiso `departments.update`."""
     result = await db.execute(select(Department).where(Department.id == department_id))
     department = result.scalar_one_or_none()
 
@@ -129,10 +131,10 @@ async def update_department(
 )
 async def delete_department(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("departments.delete"))],
     department_id: UUID,
 ) -> None:
-    """Eliminar un departamento. Requiere rol admin."""
+    """Eliminar un departamento. Requiere el permiso `departments.delete`."""
     result = await db.execute(select(Department).where(Department.id == department_id))
     department = result.scalar_one_or_none()
 

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_active_admin, get_current_secretaria_or_above
+from app.api.deps import get_db, get_current_user, require_permission
 from app.models.position import Position
 from app.models.user import User
 from app.schemas.position import PositionCreate, PositionUpdate, PositionResponse
@@ -20,11 +20,12 @@ router = APIRouter()
 )
 async def list_positions(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Position]:
-    """Listar cargos y puestos. No requiere autenticación."""
+    """Listar cargos y puestos. Requiere autenticación."""
     query = select(Position)
 
     if active_only:
@@ -46,9 +47,10 @@ async def list_positions(
 )
 async def get_position(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     position_id: UUID,
 ) -> Position:
-    """Obtener un puesto por su UUID."""
+    """Obtener un puesto por su UUID. Requiere autenticación."""
     result = await db.execute(select(Position).where(Position.id == position_id))
     position = result.scalar_one_or_none()
 
@@ -73,10 +75,10 @@ async def get_position(
 )
 async def create_position(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("positions.create"))],
     position_in: PositionCreate,
 ) -> Position:
-    """Crear un nuevo cargo o puesto. Requiere rol secretaria o superior. El nombre debe ser único."""
+    """Crear un nuevo cargo o puesto. Requiere el permiso `positions.create`. El nombre debe ser único."""
     # Check if name already exists
     result = await db.execute(select(Position).where(Position.name == position_in.name))
     if result.scalar_one_or_none():
@@ -103,11 +105,11 @@ async def create_position(
 )
 async def update_position(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("positions.update"))],
     position_id: UUID,
     position_in: PositionUpdate,
 ) -> Position:
-    """Actualizar un puesto parcialmente. Requiere rol secretaria o superior."""
+    """Actualizar un puesto parcialmente. Requiere el permiso `positions.update`."""
     result = await db.execute(select(Position).where(Position.id == position_id))
     position = result.scalar_one_or_none()
 
@@ -138,10 +140,10 @@ async def update_position(
 )
 async def delete_position(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("positions.delete"))],
     position_id: UUID,
 ) -> None:
-    """Eliminar un puesto. Requiere rol admin."""
+    """Eliminar un puesto. Requiere el permiso `positions.delete`."""
     result = await db.execute(select(Position).where(Position.id == position_id))
     position = result.scalar_one_or_none()
 
