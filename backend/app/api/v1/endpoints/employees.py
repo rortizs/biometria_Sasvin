@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import Annotated
 from uuid import UUID
 
@@ -6,12 +7,33 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin, get_current_user, get_current_secretaria_or_above
+from app.api.deps import (
+    get_db,
+    get_current_active_admin,
+    get_current_user,
+    require_permission,
+    require_teacher_position,
+)
 from app.models.employee import Employee
+from app.models.position import Position
 from app.models.user import User
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeResponse
 
 router = APIRouter()
+
+
+async def _require_teacher_target_position(db: AsyncSession, position_id: UUID | None) -> None:
+    """Design.md D6, spec "SECRETARIA creates/edits catedrático employees
+    only" / "SECRETARIA cannot manage non-teaching employees": load the
+    target `position_id` (the one the employee will end up with after this
+    request) and gate it through `require_teacher_position`. No
+    `position_id` at all fails closed, same as a non-teaching position.
+    """
+    position = None
+    if position_id is not None:
+        result = await db.execute(select(Position).where(Position.id == position_id))
+        position = result.scalar_one_or_none()
+    require_teacher_position(SimpleNamespace(position_rel=position))
 
 
 @router.get(
@@ -137,11 +159,14 @@ async def get_employee(
 )
 async def create_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("employees.manage.catedratico"))],
     employee_in: EmployeeCreate,
 ) -> EmployeeResponse:
     """
-    Crear un nuevo empleado/catedrático. Requiere rol secretaria o superior.
+    Crear un nuevo empleado/catedrático. Requiere el permiso
+    `employees.manage.catedratico`, y el `position_id` del empleado debe
+    corresponder a un puesto con `canonical_role = CATEDRATICO` (spec:
+    "SECRETARIA creates/edits catedrático employees only").
 
     El `employee_code` debe ser único (p.ej. `EMP-001`, número de carné, código institucional).
     El email también es requerido y se usa solo para identificación interna — no se envían correos.
@@ -158,6 +183,8 @@ async def create_employee(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Employee code already exists",
         )
+
+    await _require_teacher_target_position(db, employee_in.position_id)
 
     employee = Employee(**employee_in.model_dump())
     db.add(employee)
@@ -193,12 +220,16 @@ async def create_employee(
 )
 async def update_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("employees.manage.catedratico"))],
     employee_id: UUID,
     employee_in: EmployeeUpdate,
 ) -> EmployeeResponse:
     """
-    Actualizar parcialmente los datos de un empleado. Requiere rol secretaria o superior.
+    Actualizar parcialmente los datos de un empleado. Requiere el permiso
+    `employees.manage.catedratico`, y el `position_id` resultante (el del
+    body si se envía, si no el ya persistido) debe corresponder a un puesto
+    con `canonical_role = CATEDRATICO` (spec: "SECRETARIA cannot manage
+    non-teaching employees").
 
     Solo se actualizan los campos incluidos en el body (PATCH semántico).
     Para dar de baja a un empleado sin eliminarlo, usar `is_active: false`.
@@ -221,6 +252,9 @@ async def update_employee(
         )
 
     update_data = employee_in.model_dump(exclude_unset=True)
+    target_position_id = update_data.get("position_id", employee.position_id)
+    await _require_teacher_target_position(db, target_position_id)
+
     for field, value in update_data.items():
         setattr(employee, field, value)
 
