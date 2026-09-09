@@ -96,6 +96,6 @@ New Alembic revision on top of `202606101200`. Upgrade: add enum values, create 
 
 ## Open Questions
 
-- [ ] **(blocking for tasks)** Secretaría↔Director cardinality: this design assumes an explicit assignment relation (`user_scope_assignments.director_user_id`) allowing 1:N in both directions, with a *single* `SECRETARIA` role behaving identically for every director it is assigned to. Maintainer must confirm before `sdd-tasks`.
-- [ ] Do `DECANO`/`DUEÑO` retain any permission-request visibility? This design says no (fail closed), since the stated rules mention only reports and dashboard.
-- [ ] Is the coordinador scope facultad (`department`), sede (`location`), or both simultaneously? The model supports both; enforcement currently assumes union-match.
+- [x] **(blocking for tasks)** Secretaría↔Director cardinality: this design assumes an explicit assignment relation (`user_scope_assignments.director_user_id`) allowing 1:N in both directions, with a *single* `SECRETARIA` role behaving identically for every director it is assigned to. **Confirmed by maintainer** — implemented in PR12 (task 3.13).
+- [x] Do `DECANO`/`DUEÑO` retain any permission-request visibility? This design says no (fail closed), since the stated rules mention only reports and dashboard. **Implemented** — `Permission Request Visibility` spec's explicit allow-list excludes `DECANO`/`DUEÑO`.
+- [x] Is the coordinador scope facultad (`department`), sede (`location`), or both simultaneously? The model supports both; enforcement assumes union-match. **Implemented** — stage 1/stage 2 scope resolution in `permission_requests.py` (task 3.13) uses union-match.
