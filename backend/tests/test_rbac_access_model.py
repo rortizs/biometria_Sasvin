@@ -378,10 +378,11 @@ def test_require_teacher_position_denies_employee_with_no_position():
 def test_coarse_role_gates_are_documented_as_deprecated(gate_name):
     # Design.md D10: these three coarse gates are the over-privilege root
     # cause task 3.9+ replaces with require_permission(...) + scope
-    # assertions. They keep working here (existing call sites in
-    # employees/schedules/departments/positions/locations/settings/faces
-    # are out of scope for this task) but must be clearly marked
-    # deprecated so nobody adds a new call site.
+    # assertions. They keep working here (remaining call sites: employees.py
+    # `delete_employee`, auth.py, attendance.py are out of scope for this
+    # task; schedules/departments/positions/locations/settings/faces and
+    # employees create/update have already been migrated off them) but must
+    # be clearly marked deprecated so nobody adds a new call site.
     gate = getattr(deps, gate_name)
     assert "deprecated" in (gate.__doc__ or "").lower()
 
