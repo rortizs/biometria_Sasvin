@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -201,6 +201,69 @@ async def assert_request_scope(
         checks.append(target_director_id in scopes.director_ids)
     if not checks or not any(checks):
         raise _permission_denied()
+
+
+def user_has_role(user: User, role: UserRole, configured_settings=settings) -> bool:
+    """Public predicate over `_canonical_roles_for_user`, for call sites
+    that need a plain role check without a full `require_permission`
+    dependency -- e.g. `attendance.py`'s optional-auth self-scope
+    enforcement, which must not force authentication onto an
+    intentionally-anonymous route just to inspect one role."""
+    return role in _canonical_roles_for_user(user, configured_settings)
+
+
+async def get_optional_current_user(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User | None:
+    """Best-effort actor resolution for routes that stay reachable without
+    authentication (spec: attendance-access-control's face-recognition
+    kiosk flow, `"No requiere autenticacion"`) but must additionally
+    enforce actor-specific rules when a Bearer token happens to be
+    present -- e.g. the frontend's global auth interceptor attaches one to
+    every outgoing request whenever the caller's browser already has an
+    active session (`frontend/.../auth.interceptor.ts`), even on routes
+    with no Angular route guard (`/kiosk`, `/attendance` are guardless in
+    `app.routes.ts`).
+
+    Unlike `get_current_user`, this function NEVER raises: a missing,
+    malformed, expired, or otherwise invalid token -- or a token for an
+    inactive/nonexistent user -- silently resolves to `None`, preserving
+    the anonymous kiosk path for every caller that doesn't happen to carry
+    a session token. Callers that need a required actor must keep using
+    `get_current_user`/`require_permission`.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return None
+
+    scheme, _, token = auth_header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+
+    payload = decode_token(token)
+    if payload is None or payload.get("type") != "access":
+        return None
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        return None
+
+    result = await db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .options(
+            selectinload(User.user_roles)
+            .selectinload(UserRoleAssignment.role)
+            .selectinload(Role.permissions)
+        )
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None or not user.is_active:
+        return None
+
+    return user
 
 
 def require_teacher_position(employee) -> None:
