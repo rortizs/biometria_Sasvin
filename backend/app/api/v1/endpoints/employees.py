@@ -9,7 +9,6 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import (
     get_db,
-    get_current_active_admin,
     get_current_user,
     require_permission,
     require_teacher_position,
@@ -283,18 +282,21 @@ async def update_employee(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["employees"],
     responses={
-        401: {"description": "Token inválido o expirado — se requiere rol admin"},
-        403: {"description": "Solo el admin puede eliminar empleados"},
+        401: {"description": "Token inválido o expirado"},
+        403: {"description": "Permisos insuficientes"},
         404: {"description": "Empleado no encontrado"},
     },
 )
 async def delete_employee(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("employees.delete"))],
     employee_id: UUID,
 ) -> None:
     """
-    Eliminar permanentemente un empleado y todos sus datos. Requiere rol admin.
+    Eliminar permanentemente un empleado y todos sus datos. Requiere el
+    permiso `employees.delete` (spec: rbac-access-model "Business Top Role
+    Boundaries" — DECANO/DUEÑO no pueden realizar acciones operativas de
+    escritura, solo lectura/reportería).
 
     **ADVERTENCIA — efecto CASCADE:** elimina también todos los registros asociados:
     embeddings faciales, registros de asistencia e historial de sesiones biométricas.
