@@ -10,10 +10,13 @@ from fastapi import HTTPException
 
 from app.api.deps import (
     assert_object_access,
+    assert_request_scope,
     ensure_can_assign_role,
     has_permission,
     is_bootstrap_admin,
     get_current_active_admin,
+    require_teacher_position,
+    resolve_user_scopes,
 )
 from app.api import deps
 from app.core.config import Settings
@@ -237,6 +240,150 @@ def test_object_access_allows_owner_and_denies_unrelated_actor():
     with pytest.raises(HTTPException) as exc_info:
         assert_object_access(actor, owner_user_id=uuid4())
     assert exc_info.value.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Task 3.7: resolve_user_scopes / assert_request_scope / require_teacher_position
+# Design.md D4, Interfaces section. Spec: "Organizational Scope Assignment"
+# scenario "Missing scope assignment fails closed".
+# ---------------------------------------------------------------------------
+
+
+def _scope_row(department_id=None, location_id=None, director_user_id=None) -> SimpleNamespace:
+    return SimpleNamespace(
+        department_id=department_id,
+        location_id=location_id,
+        director_user_id=director_user_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_scopes_collects_department_location_director_ids():
+    coordinador = _user("coordinador@example.com", UserRole.COORDINADOR)
+    department_id, location_id, director_id = uuid4(), uuid4(), uuid4()
+    db = _mock_db(
+        _db_result(
+            values=[
+                _scope_row(department_id=department_id),
+                _scope_row(location_id=location_id),
+                _scope_row(director_user_id=director_id),
+            ]
+        )
+    )
+
+    scopes = await resolve_user_scopes(db, coordinador)
+
+    assert scopes.department_ids == frozenset({department_id})
+    assert scopes.location_ids == frozenset({location_id})
+    assert scopes.director_ids == frozenset({director_id})
+    assert scopes.is_unscoped is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_user_scopes_returns_unscoped_set_when_no_assignments():
+    # Design.md D3 rung 3: an ambiguous-reclassification COORDINADOR is
+    # deliberately left with no user_scope_assignments row.
+    unscoped_coordinador = _user("unscoped-coordinador@example.com", UserRole.COORDINADOR)
+    db = _mock_db(_db_result(values=[]))
+
+    scopes = await resolve_user_scopes(db, unscoped_coordinador)
+
+    assert scopes.department_ids == frozenset()
+    assert scopes.location_ids == frozenset()
+    assert scopes.director_ids == frozenset()
+    assert scopes.is_unscoped is True
+
+
+@pytest.mark.asyncio
+async def test_assert_request_scope_allows_when_target_department_is_in_scope():
+    coordinador = _user("coordinador@example.com", UserRole.COORDINADOR)
+    department_id = uuid4()
+    db = _mock_db(_db_result(values=[_scope_row(department_id=department_id)]))
+
+    await assert_request_scope(db, coordinador, target_department_id=department_id)
+
+
+@pytest.mark.asyncio
+async def test_assert_request_scope_denies_cross_scope_department_mismatch():
+    # Spec: "Cross-scope denial tests cover organizational boundaries" -- a
+    # COORDINADOR assigned to one facultad cannot act on a different one.
+    coordinador = _user("coordinador@example.com", UserRole.COORDINADOR)
+    own_department_id, other_department_id = uuid4(), uuid4()
+    db = _mock_db(_db_result(values=[_scope_row(department_id=own_department_id)]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await assert_request_scope(db, coordinador, target_department_id=other_department_id)
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_assert_request_scope_denies_unscoped_user_fails_closed():
+    # Spec scenario "Missing scope assignment fails closed": no matching
+    # row -> deny, never fall back to unscoped/global access.
+    unscoped_coordinador = _user("unscoped-coordinador@example.com", UserRole.COORDINADOR)
+    db = _mock_db(_db_result(values=[]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await assert_request_scope(db, unscoped_coordinador, target_department_id=uuid4())
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_assert_request_scope_denies_when_no_target_is_provided():
+    # Calling the guard without naming a target is a caller error and must
+    # also fail closed, not silently pass.
+    coordinador = _user("coordinador@example.com", UserRole.COORDINADOR)
+    db = _mock_db(_db_result(values=[_scope_row(department_id=uuid4())]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await assert_request_scope(db, coordinador)
+    assert exc_info.value.status_code == 403
+
+
+def _employee_with_position(canonical_role: str | None) -> SimpleNamespace:
+    position = SimpleNamespace(canonical_role=canonical_role)
+    return SimpleNamespace(position_rel=position)
+
+
+def test_require_teacher_position_allows_catedratico_position():
+    employee = _employee_with_position("CATEDRATICO")
+
+    require_teacher_position(employee)
+
+
+@pytest.mark.parametrize("canonical_role", [None, "COORDINADOR", "SECRETARIA"])
+def test_require_teacher_position_denies_non_teaching_position(canonical_role):
+    employee = _employee_with_position(canonical_role)
+
+    with pytest.raises(HTTPException) as exc_info:
+        require_teacher_position(employee)
+    assert exc_info.value.status_code == 403
+
+
+def test_require_teacher_position_denies_employee_with_no_position():
+    employee = SimpleNamespace(position_rel=None)
+
+    with pytest.raises(HTTPException):
+        require_teacher_position(employee)
+
+
+@pytest.mark.parametrize(
+    "gate_name",
+    [
+        "get_current_secretaria_or_above",
+        "get_current_coordinador_or_above",
+        "get_current_active_admin",
+    ],
+)
+def test_coarse_role_gates_are_documented_as_deprecated(gate_name):
+    # Design.md D10: these three coarse gates are the over-privilege root
+    # cause task 3.9+ replaces with require_permission(...) + scope
+    # assertions. They keep working here (existing call sites in
+    # employees/schedules/departments/positions/locations/settings/faces
+    # are out of scope for this task) but must be clearly marked
+    # deprecated so nobody adds a new call site.
+    gate = getattr(deps, gate_name)
+    assert "deprecated" in (gate.__doc__ or "").lower()
 
 
 @pytest.mark.asyncio
@@ -883,6 +1030,21 @@ def test_legacy_admin_fallback_role_rejects_system_or_invalid_values():
     assert _settings().legacy_admin_fallback_role == "DECANO"
 
     for fallback in ("ADMIN", "DEV", "superadmin"):
+        with pytest.raises(ValueError):
+            Settings(
+                bootstrap_admin_email="root@example.com",
+                bootstrap_admin_full_name="Root Admin",
+                bootstrap_admin_password="ChangeMe123!",
+                legacy_admin_fallback_role=fallback,
+            )
+
+
+def test_legacy_admin_fallback_role_rejects_director_and_administrativo():
+    # Design.md D9: DIRECTOR is now read-only (never an approver/fallback
+    # landing role) and ADMINISTRATIVO is deprecated/non-assignable, so
+    # neither is a valid LEGACY_ADMIN_FALLBACK_ROLE target anymore, even
+    # though both were accepted before task 3.6.
+    for fallback in ("DIRECTOR", "ADMINISTRATIVO"):
         with pytest.raises(ValueError):
             Settings(
                 bootstrap_admin_email="root@example.com",

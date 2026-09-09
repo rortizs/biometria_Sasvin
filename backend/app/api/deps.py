@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass, field
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -13,6 +14,7 @@ from app.db.session import get_db
 from app.models.role import Role
 from app.models.role_permission import UserRoleAssignment
 from app.models.user import ASSIGNABLE_ROLE_VALUES, User, UserRole, canonical_role_from_value
+from app.models.user_scope_assignment import UserScopeAssignment
 
 settings = get_settings()
 
@@ -112,6 +114,110 @@ def protect_bootstrap_admin_mutation(target_user: User, actor: User, configured_
         raise _permission_denied()
 
 
+@dataclass(frozen=True)
+class ScopeSet:
+    """Design.md D4: the resolved organizational scope for one user, built
+    from their `user_scope_assignments` rows.
+
+    Every field is a `frozenset` of target IDs (departments/facultades,
+    locations/sedes, directors). An all-empty `ScopeSet` means the user has
+    no assignment row at all -- callers MUST treat that as unscoped and
+    deny (spec: "Missing scope assignment fails closed"), never as "no
+    restriction, allow everything". `assert_request_scope` enforces this;
+    `is_unscoped` is exposed for callers that need the raw signal.
+    """
+
+    department_ids: frozenset = field(default_factory=frozenset)
+    location_ids: frozenset = field(default_factory=frozenset)
+    director_ids: frozenset = field(default_factory=frozenset)
+
+    @property
+    def is_unscoped(self) -> bool:
+        return not (self.department_ids or self.location_ids or self.director_ids)
+
+
+async def resolve_user_scopes(db: AsyncSession, user: User) -> ScopeSet:
+    """Design.md D4: query `user_scope_assignments` for `user` and return
+    the set of department/location/director IDs they are scoped to.
+
+    Returns an all-empty `ScopeSet` when the user has no assignment rows
+    (unscoped) -- this is a valid, expected state (e.g. the D3 rung-3
+    ambiguous-reclassification fallback), not an error. Callers are
+    responsible for failing closed on that case via `assert_request_scope`.
+    """
+    result = await db.execute(
+        select(UserScopeAssignment).where(UserScopeAssignment.user_id == user.id)
+    )
+    department_ids: set = set()
+    location_ids: set = set()
+    director_ids: set = set()
+    for assignment in result.scalars().all():
+        if getattr(assignment, "department_id", None) is not None:
+            department_ids.add(assignment.department_id)
+        if getattr(assignment, "location_id", None) is not None:
+            location_ids.add(assignment.location_id)
+        if getattr(assignment, "director_user_id", None) is not None:
+            director_ids.add(assignment.director_user_id)
+    return ScopeSet(
+        department_ids=frozenset(department_ids),
+        location_ids=frozenset(location_ids),
+        director_ids=frozenset(director_ids),
+    )
+
+
+async def assert_request_scope(
+    db: AsyncSession,
+    user: User,
+    *,
+    target_department_id=None,
+    target_location_id=None,
+    target_director_id=None,
+) -> None:
+    """Design.md D4/D10, spec "Missing scope assignment fails closed":
+    raise 403 unless `user`'s resolved `user_scope_assignments` cover at
+    least one of the provided targets.
+
+    Fails closed in every edge case:
+    - an unscoped user (all-empty `ScopeSet`, e.g. a D3 rung-3 audited
+      fallback `COORDINADOR`) is denied on every call, never silently
+      allowed through;
+    - a scoped user whose assignment targets a *different* department,
+      location, or director than the one requested is denied (cross-scope
+      denial);
+    - calling with no target at all is a caller error and is also denied,
+      never treated as "nothing to check, allow".
+
+    Multiple provided targets use union-match semantics (matching any one
+    of them is enough), per design.md's own open question note that
+    facultad/sede scope enforcement "currently assumes union-match".
+    """
+    scopes = await resolve_user_scopes(db, user)
+    checks = []
+    if target_department_id is not None:
+        checks.append(target_department_id in scopes.department_ids)
+    if target_location_id is not None:
+        checks.append(target_location_id in scopes.location_ids)
+    if target_director_id is not None:
+        checks.append(target_director_id in scopes.director_ids)
+    if not checks or not any(checks):
+        raise _permission_denied()
+
+
+def require_teacher_position(employee) -> None:
+    """Design.md D6: assert `employee`'s position maps to the teacher
+    canonical role (`CATEDRATICO`).
+
+    Used to gate `SECRETARIA`'s employee-write access (spec: "SECRETARIA
+    creates/edits catedrático employees only" / "SECRETARIA cannot manage
+    non-teaching employees"). This call only builds and unit-tests the
+    guard; task 3.9 wires it into the `employees` endpoint call site.
+    """
+    position = getattr(employee, "position_rel", None)
+    canonical_role = getattr(position, "canonical_role", None) if position else None
+    if canonical_role != UserRole.CATEDRATICO.value:
+        raise _permission_denied()
+
+
 def require_permission(code: str):
     async def dependency(current_user: Annotated[User, Depends(get_current_user)]) -> User:
         if not has_permission(current_user, code):
@@ -177,6 +283,12 @@ async def get_current_user(
 async def get_current_active_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
+    """DEPRECATED (design.md D10): this coarse role gate is the over-
+    privilege root cause tasks 3.9-3.12 replace with
+    `require_permission(...)` + object/scope assertions. Kept working
+    as-is for existing call sites (employees/schedules/departments/
+    positions/locations/settings/faces/attendance) until those tasks
+    migrate them; do not add new call sites."""
     deploy_safe_admin_roles = {UserRole.ADMIN, UserRole.DEV, UserRole.DECANO, UserRole.DUEÑO}
     if not (_canonical_roles_for_user(current_user) & deploy_safe_admin_roles):
         raise _permission_denied()
@@ -197,7 +309,15 @@ async def get_current_technical_rbac_admin(
 async def get_current_coordinador_or_above(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    """Allow coordinador, director, admin"""
+    """Allow coordinador, director, admin
+
+    DEPRECATED (design.md D10): still matches the legacy `ADMINISTRATIVO`
+    role and `DIRECTOR` (now read-only, never an approver), not the split
+    `COORDINADOR`/`SECRETARIA` roles. Task 3.13 replaces this with
+    scope-aware `require_permission("permission_requests.approve.stage1")`
+    + `assert_request_scope`. Kept working as-is for the current
+    `permission_requests` call sites; do not add new call sites.
+    """
     allowed = {UserRole.ADMINISTRATIVO, UserRole.DIRECTOR, UserRole.ADMIN}
     if not (_canonical_roles_for_user(current_user) & allowed):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
@@ -217,7 +337,18 @@ async def get_current_director_or_above(
 async def get_current_secretaria_or_above(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    """Allow secretaria, coordinador, director, admin"""
+    """Allow secretaria, coordinador, director, admin
+
+    DEPRECATED (design.md D10): this is the actual over-privilege root
+    cause flagged by design.md's decision table -- it still matches the
+    legacy `ADMINISTRATIVO` role and `DIRECTOR` (now read-only), granting
+    write access to employees/positions/schedules/departments/locations
+    that neither role should have under the split taxonomy. Task 3.9
+    replaces its `employees` call sites with
+    `require_permission("employees.manage.catedratico")` +
+    `require_teacher_position`; tasks 3.10-3.12 replace the rest. Kept
+    working as-is until those tasks land; do not add new call sites.
+    """
     allowed = {UserRole.ADMINISTRATIVO, UserRole.DIRECTOR, UserRole.ADMIN}
     if not (_canonical_roles_for_user(current_user) & allowed):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")

@@ -3,7 +3,11 @@ from pydantic import field_validator
 from functools import lru_cache
 
 
-LEGACY_ADMIN_FALLBACK_ALLOWED_ROLES = {"DECANO", "DUEÑO", "DIRECTOR", "ADMINISTRATIVO"}
+# Design.md D9: DIRECTOR is read-only (never an approver) and ADMINISTRATIVO
+# is deprecated/non-assignable, so neither is a valid landing role for a
+# legacy admin fallback anymore. Only the two read-only business top roles
+# remain eligible.
+LEGACY_ADMIN_FALLBACK_ALLOWED_ROLES = {"DECANO", "DUEÑO"}
 
 
 class Settings(BaseSettings):
