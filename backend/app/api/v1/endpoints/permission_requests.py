@@ -12,6 +12,7 @@ from app.api.deps import (
     get_current_user,
     get_db,
     has_permission,
+    is_bootstrap_admin,
     resolve_user_scopes,
     user_has_role,
 )
@@ -132,6 +133,121 @@ async def _assert_stage2_secretaria_scope(
 
 
 # ---------------------------------------------------------------------------
+# Visibility + creation scope helpers (design.md D4/D7/D10, task 3.14)
+# ---------------------------------------------------------------------------
+
+
+def _is_denied_visibility_role(actor: User) -> bool:
+    """Spec "Permission Request Visibility": `DECANO`/`DUEÑO` have no
+    visibility into permission requests at all -- fail closed regardless
+    of ownership or scope, per the explicit "DECANO/DUEÑO cannot view
+    permission requests" scenario.
+    """
+    return user_has_role(actor, UserRole.DECANO) or user_has_role(actor, UserRole.DUEÑO)
+
+
+async def _actor_scope_matches_request(
+    db: AsyncSession, actor: User, employee: Employee | None
+) -> bool:
+    """Boolean wrapper around `assert_request_scope` (tasks 3.7/3.13) for
+    read-only visibility: a `COORDINADOR` or `DIRECTOR` may view a request
+    when their own `user_scope_assignments` cover the request employee's
+    facultad/sede -- the same scope match stage 1 approval already
+    enforces, reused rather than duplicated (spec "Scoped coordinador
+    views request" / "Scoped director views request read-only").
+    """
+    try:
+        await assert_request_scope(
+            db,
+            actor,
+            target_department_id=employee.department_id if employee else None,
+            target_location_id=employee.location_id if employee else None,
+        )
+        return True
+    except HTTPException:
+        return False
+
+
+async def _actor_can_view_request(
+    db: AsyncSession, actor: User, permission_request: PermissionRequest
+) -> bool:
+    """Spec "Permission Request Visibility": an actor may see a request
+    only if they are the owner, a scoped `COORDINADOR`, a scoped `DIRECTOR`
+    (read-only), the `SECRETARIA` assigned to the request's scope
+    `DIRECTOR`(s), or `DEV`/bootstrap `ADMIN`. Every other actor -- and
+    `DECANO`/`DUEÑO` unconditionally -- is denied (fail closed).
+    """
+    if _is_denied_visibility_role(actor):
+        return False
+    if is_bootstrap_admin(actor) or user_has_role(actor, UserRole.DEV):
+        return True
+    if permission_request.requested_by_user_id == actor.id:
+        return True
+
+    employee = await _get_request_employee(db, permission_request)
+
+    if user_has_role(actor, UserRole.COORDINADOR) or user_has_role(actor, UserRole.DIRECTOR):
+        if await _actor_scope_matches_request(db, actor, employee):
+            return True
+
+    if user_has_role(actor, UserRole.SECRETARIA):
+        director_ids = await _resolve_scope_director_ids(db, employee)
+        if director_ids:
+            actor_scope = await resolve_user_scopes(db, actor)
+            if director_ids & actor_scope.director_ids:
+                return True
+
+    return False
+
+
+async def _resolve_visible_employee_ids(db: AsyncSession, actor: User) -> set:
+    """DB-level visibility scope for `list_permission_requests` (spec
+    "Permission Request Visibility"): which `employee_id`s this actor may
+    see requests for, beyond their own. A `COORDINADOR`/`DIRECTOR` sees
+    requests for employees inside their own department/location scope; an
+    assigned `SECRETARIA` sees requests for employees inside her assigned
+    `DIRECTOR`(s)' department/location scope (design.md D7 -- `SECRETARIA`
+    holds no department/location scope of her own, only a
+    `director_user_id` link). Returns an empty set when the actor holds
+    none of these roles or has no matching scope -- the caller combines
+    this with an owner-only fallback, never treats empty as "see
+    everything".
+    """
+    department_ids: set = set()
+    location_ids: set = set()
+
+    if user_has_role(actor, UserRole.COORDINADOR) or user_has_role(actor, UserRole.DIRECTOR):
+        scopes = await resolve_user_scopes(db, actor)
+        department_ids |= set(scopes.department_ids)
+        location_ids |= set(scopes.location_ids)
+
+    if user_has_role(actor, UserRole.SECRETARIA):
+        actor_scopes = await resolve_user_scopes(db, actor)
+        if actor_scopes.director_ids:
+            result = await db.execute(
+                select(UserScopeAssignment).where(
+                    UserScopeAssignment.user_id.in_(actor_scopes.director_ids)
+                )
+            )
+            for assignment in result.scalars().all():
+                if assignment.department_id is not None:
+                    department_ids.add(assignment.department_id)
+                if assignment.location_id is not None:
+                    location_ids.add(assignment.location_id)
+
+    if not department_ids and not location_ids:
+        return set()
+
+    conditions = []
+    if department_ids:
+        conditions.append(Employee.department_id.in_(department_ids))
+    if location_ids:
+        conditions.append(Employee.location_id.in_(location_ids))
+    result = await db.execute(select(Employee.id).where(or_(*conditions)))
+    return set(result.scalars().all())
+
+
+# ---------------------------------------------------------------------------
 # POST /permission-requests  — any authenticated user
 # ---------------------------------------------------------------------------
 
@@ -154,7 +270,21 @@ async def create_permission_request(
 
     La `start_date` debe ser al menos 7 días posterior a la fecha de hoy.
     La solicitud queda en estado `pending` hasta que un coordinador la apruebe.
+
+    Spec "Permission Request Creation": un actor solo puede crear una
+    solicitud para su propio `employee_id` (derivado de su identidad de
+    usuario, nunca del valor enviado por el cliente) -- se deniega
+    cualquier intento de crear una solicitud a nombre de otro empleado.
+    `DEV`/bootstrap `ADMIN` quedan exentos (mismo patrón administrativo
+    usado en el resto de este archivo).
     """
+    if not (is_bootstrap_admin(current_user) or user_has_role(current_user, UserRole.DEV)):
+        if current_user.employee_id != request_in.employee_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo puede crear solicitudes de permiso para su propio registro de empleado",
+            )
+
     permission_request = PermissionRequest(
         requested_by_user_id=current_user.id,
         employee_id=request_in.employee_id,
@@ -190,18 +320,28 @@ async def list_permission_requests(
     """
     Listar solicitudes de permiso.
 
-    - `admin`, `director`, `coordinador`: ven **todas** las solicitudes.
-    - `secretaria`, `catedratico`: ven únicamente sus propias solicitudes.
+    Spec "Permission Request Visibility": expone solicitudes únicamente al
+    dueño, al `COORDINADOR` con alcance, al `DIRECTOR` con alcance
+    (solo lectura), a la `SECRETARIA` asignada al director del alcance, y
+    a `DEV`/bootstrap `ADMIN`. `DECANO`/`DUEÑO` no tienen ninguna
+    visibilidad sobre solicitudes de permiso.
 
     Filtros opcionales: `status`, `employee_id`.
     """
-    _privileged = {UserRole.admin, UserRole.director, UserRole.coordinador}
+    if _is_denied_visibility_role(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No autorizado para ver solicitudes de permiso",
+        )
 
-    query = select(PermissionRequest)
-
-    if current_user.role not in _privileged:
-        # Restrict to own requests
-        query = query.where(PermissionRequest.requested_by_user_id == current_user.id)
+    if is_bootstrap_admin(current_user) or user_has_role(current_user, UserRole.DEV):
+        query = select(PermissionRequest)
+    else:
+        visible_employee_ids = await _resolve_visible_employee_ids(db, current_user)
+        conditions = [PermissionRequest.requested_by_user_id == current_user.id]
+        if visible_employee_ids:
+            conditions.append(PermissionRequest.employee_id.in_(visible_employee_ids))
+        query = select(PermissionRequest).where(or_(*conditions))
 
     if status_filter is not None:
         query = query.where(PermissionRequest.status == status_filter)
@@ -236,27 +376,23 @@ async def get_permission_request(
     """
     Obtener una solicitud de permiso por su UUID.
 
-    - `admin`, `director`, `coordinador`: pueden ver cualquier solicitud.
-    - `secretaria`, `catedratico`: solo las propias.
+    Spec "Permission Request Visibility": visible únicamente al dueño, al
+    `COORDINADOR` con alcance, al `DIRECTOR` con alcance (solo lectura), a
+    la `SECRETARIA` asignada al director del alcance, y a `DEV`/bootstrap
+    `ADMIN`. `DECANO`/`DUEÑO` no tienen ninguna visibilidad. La misma
+    respuesta ya incluye `status`, `coordinator_notes`/`director_notes` y
+    `rejection_reason`, por lo que este chequeo también cubre la spec
+    "Requester Outcome Notification" (el dueño ve el estado final y la
+    justificación al leer su propia solicitud, sin necesitar un endpoint
+    adicional).
     """
-    result = await db.execute(
-        select(PermissionRequest).where(PermissionRequest.id == request_id)
-    )
-    permission_request = result.scalar_one_or_none()
+    permission_request = await _get_request_or_404(db, request_id)
 
-    if not permission_request:
+    if not await _actor_can_view_request(db, current_user, permission_request):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Solicitud no encontrada",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No autorizado para ver esta solicitud",
         )
-
-    _privileged = {UserRole.admin, UserRole.director, UserRole.coordinador}
-    if current_user.role not in _privileged:
-        if permission_request.requested_by_user_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="No autorizado para ver esta solicitud",
-            )
 
     return PermissionRequestResponse.model_validate(permission_request)
 
