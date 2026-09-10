@@ -10,6 +10,7 @@ from app.api.deps import (
     get_db,
     get_current_user,
     get_current_active_admin,
+    permission_codes_for_user,
     settings,
 )
 from app.core.security import (
@@ -20,7 +21,13 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
-from app.schemas.user import Token, UserCreate, UserResponse, ChangeFirstPasswordRequest
+from app.schemas.user import (
+    AuthMeResponse,
+    ChangeFirstPasswordRequest,
+    Token,
+    UserCreate,
+    UserResponse,
+)
 
 router = APIRouter()
 
@@ -182,7 +189,7 @@ async def refresh_token(
 
 @router.get(
     "/me",
-    response_model=UserResponse,
+    response_model=AuthMeResponse,
     tags=["auth"],
     responses={
         401: {"description": "Token inválido o expirado"},
@@ -190,15 +197,22 @@ async def refresh_token(
 )
 async def get_current_user_info(
     current_user: Annotated[User, Depends(get_current_user)],
-) -> User:
+) -> AuthMeResponse:
     """
     Obtener los datos del usuario autenticado actualmente.
 
     Útil para verificar que el token es válido y conocer el rol del usuario
     sin hacer otra llamada. También sirve como health-check de autenticación
     desde el frontend al cargar la aplicación.
+
+    Incluye `permissions`: la lista de códigos de permiso efectivamente
+    otorgados al usuario actual (calculada desde la relación ya cargada por
+    `get_current_user()`, sin consulta adicional), para que el frontend
+    pueda construir guards/UI basados en permisos en vez de comparar
+    nombres de rol directamente.
     """
-    return current_user
+    data = UserResponse.model_validate(current_user).model_dump()
+    return AuthMeResponse(**data, permissions=permission_codes_for_user(current_user))
 
 
 @router.post(

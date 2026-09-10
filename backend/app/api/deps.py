@@ -75,6 +75,51 @@ def has_permission(user: User, code: str, configured_settings=settings) -> bool:
     return False
 
 
+def permission_codes_for_user(user: User, configured_settings=settings) -> list[str]:
+    """Deduplicated, sorted permission codes actually granted to `user`,
+    computed from the already-eager-loaded `user.user_roles -> role ->
+    permissions` relationship (`get_current_user()` already performs this
+    eager load for every authenticated request -- no additional query).
+
+    Mirrors `has_permission()`'s DB-backed grant-matching loop exactly
+    (same canonical-role filter), but WITHOUT `has_permission()`'s
+    bootstrap-ADMIN short-circuit -- `has_permission()` unconditionally
+    returns True for the hidden bootstrap ADMIN account regardless of any
+    `role_permissions` row. This codebase's migration convention grants
+    every new permission code to the `ADMIN`/`DEV` roles via
+    `role_permissions` (see `202606101200_canonical_rbac_roles.py`'s
+    cross-join and its mirrored `202606161200`/`202606181200`/
+    `202606191200` follow-ups), so the DB-backed set already IS the full
+    permission catalog for those roles when migrations follow that
+    convention -- deliberately NOT special-cased with a synthetic "all
+    permissions" sentinel, keeping this list auditable and DB-driven. If a
+    future migration ever adds a permission without granting it to
+    `ADMIN`/`DEV`, this list would under-represent bootstrap ADMIN's
+    actual (unconditional) access -- a known, documented gap, not a silent
+    one; callers evaluating actual authorization MUST keep using
+    `has_permission()`/`require_permission()`, never this list.
+    """
+    roles = _canonical_roles_for_user(user, configured_settings)
+    codes: set[str] = set()
+    for assignment in getattr(user, "user_roles", []) or []:
+        role = getattr(assignment, "role", None)
+        if not role:
+            continue
+        canonical = canonical_role_from_value(
+            getattr(role, "name", None),
+            user_email=getattr(user, "email", None),
+            bootstrap_admin_email=configured_settings.bootstrap_admin_email,
+            legacy_admin_fallback_role=configured_settings.legacy_admin_fallback_role,
+        )
+        if canonical not in roles:
+            continue
+        for permission in getattr(role, "permissions", []) or []:
+            code = getattr(permission, "code", None)
+            if code:
+                codes.add(code)
+    return sorted(codes)
+
+
 def _permission_denied() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
