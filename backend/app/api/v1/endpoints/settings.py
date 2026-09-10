@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_active_admin
+from app.api.deps import get_db, get_current_user, require_permission
 from app.models.settings import Settings
 from app.models.user import User
 from app.schemas.settings import SettingsCreate, SettingsUpdate, SettingsResponse
@@ -20,6 +20,7 @@ router = APIRouter()
 )
 async def get_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> Settings:
     """
     Obtener la configuración global del sistema.
@@ -50,11 +51,11 @@ async def get_settings(
 )
 async def update_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("settings.update"))],
     settings_in: SettingsUpdate,
 ) -> Settings:
     """
-    Actualizar la configuración global del sistema. Requiere rol admin.
+    Actualizar la configuración global del sistema. Requiere permiso `settings.update`.
 
     Si la configuración no existe aún, la crea automáticamente (upsert).
     Usar este endpoint para cambiar nombre de empresa, dominio de email,
@@ -96,11 +97,14 @@ async def update_settings(
 )
 async def create_settings(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("settings.update"))],
     settings_in: SettingsCreate,
 ) -> Settings:
     """
-    Inicializar la configuración del sistema por primera vez. Requiere rol admin.
+    Inicializar la configuración del sistema por primera vez. Requiere permiso `settings.update`.
+
+    Reutiliza `settings.update` (no existe un `settings.create` dedicado): esta acción
+    es la inicialización única del mismo registro singleton que `PUT` gestiona después.
 
     Solo puede ejecutarse una vez — si ya existe configuración, devuelve 400.
     Para actualizaciones posteriores usar `PUT /settings/`.

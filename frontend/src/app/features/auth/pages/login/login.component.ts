@@ -185,7 +185,9 @@ export class LoginComponent {
       .subscribe({
         next: () => {
           this.user$.pipe(filter(u => u !== null), take(1)).subscribe(u => {
-            const adminRoles = ['admin', 'director', 'coordinador', 'secretaria'];
+            // Casing-only fix, mirrors auth.guard.ts's ADMIN_ROLES (task 4.3) —
+            // same 4-role set, canonical uppercase (user.model.ts's UserRole).
+            const adminRoles = ['ADMIN', 'DIRECTOR', 'COORDINADOR', 'SECRETARIA'];
             const destination = u && adminRoles.includes(u.role) ? '/admin/dashboard' : '/requests';
             this.router.navigate([destination]);
           });

@@ -1,82 +1,114 @@
 #!/usr/bin/env python3
-"""
-Script to create admin user in the Biometria database.
-Run this directly on the server or through Docker.
-"""
+"""Repair or create the hidden bootstrap ADMIN user from environment settings."""
 
 import asyncio
+import os
 import sys
 from datetime import datetime
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+
 from sqlalchemy import select
-import bcrypt
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
-# Add the app directory to the path
-sys.path.insert(0, "/app")  # For Docker container
-# sys.path.insert(0, '.')    # For local development
+sys.path.insert(0, "/app")
 
-from app.models.user import User
-from app.db.base import Base
+from app.core.config import Settings, get_settings
+from app.core.security import get_password_hash
+from app.models.role import Role
+from app.models.role_permission import UserRoleAssignment
+from app.models.user import User, UserRole
 
-# Database URL - adjust as needed
-DATABASE_URL = (
-    "postgresql+asyncpg://biometria:biometria_secret@biometria_db:5432/biometria_db"
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://biometria:biometria_secret@biometria_db:5432/biometria_db",
 )
-# For local testing:
-# DATABASE_URL = "postgresql+asyncpg://richardortiz@localhost:5432/biometria_db"
 
 
-async def create_admin():
-    """Create admin user if it doesn't exist."""
+def build_bootstrap_admin_values(settings: Settings, *, hashed_password: str) -> dict:
+    return {
+        "email": settings.bootstrap_admin_email.casefold(),
+        "hashed_password": hashed_password,
+        "full_name": settings.bootstrap_admin_full_name,
+        "role": UserRole.ADMIN,
+        "is_active": True,
+        "must_change_password": True,
+    }
 
-    # Create engine
+
+def repair_bootstrap_admin_instance(
+    admin: User,
+    settings: Settings,
+    *,
+    hashed_password: str | None = None,
+) -> User:
+    admin.email = settings.bootstrap_admin_email.casefold()
+    admin.full_name = settings.bootstrap_admin_full_name
+    admin.role = UserRole.ADMIN
+    admin.is_active = True
+    admin.must_change_password = True
+    admin.updated_at = datetime.utcnow()
+    if hashed_password:
+        admin.hashed_password = hashed_password
+    return admin
+
+
+async def _ensure_admin_role(session: AsyncSession) -> Role:
+    result = await session.execute(select(Role).where(Role.name == UserRole.ADMIN.value))
+    role = result.scalar_one_or_none()
+    if role:
+        return role
+
+    role = Role(
+        name=UserRole.ADMIN.value,
+        description="Hidden bootstrap system administrator",
+        is_active=True,
+    )
+    session.add(role)
+    await session.flush()
+    return role
+
+
+async def _ensure_admin_assignment(session: AsyncSession, admin: User, role: Role) -> None:
+    result = await session.execute(
+        select(UserRoleAssignment).where(
+            UserRoleAssignment.user_id == admin.id,
+            UserRoleAssignment.role_id == role.id,
+        )
+    )
+    if result.scalar_one_or_none():
+        return
+    session.add(UserRoleAssignment(user_id=admin.id, role_id=role.id, assigned_by=admin.id))
+
+
+async def create_admin() -> None:
+    settings = get_settings()
+    if not settings.bootstrap_admin_password:
+        raise RuntimeError("BOOTSTRAP_ADMIN_PASSWORD is required for bootstrap recovery")
+
+    password_hash = get_password_hash(settings.bootstrap_admin_password)
     engine = create_async_engine(DATABASE_URL, echo=True)
-
-    # Create session
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session() as session:
         try:
-            # Check if admin exists
-            result = await session.execute(
-                select(User).where(User.email == "admin@sistemaslab.dev")
-            )
-            existing_admin = result.scalar_one_or_none()
+            email = settings.bootstrap_admin_email.casefold()
+            result = await session.execute(select(User).where(User.email == email))
+            admin = result.scalar_one_or_none()
 
-            if existing_admin:
-                print("❌ Admin user already exists!")
-                print(f"   Email: {existing_admin.email}")
-                print(f"   Role: {existing_admin.role}")
-                return
+            if admin:
+                repair_bootstrap_admin_instance(admin, settings, hashed_password=password_hash)
+                print(f"✅ Bootstrap ADMIN repaired: {email}")
+            else:
+                admin = User(**build_bootstrap_admin_values(settings, hashed_password=password_hash))
+                session.add(admin)
+                await session.flush()
+                print(f"✅ Bootstrap ADMIN created: {email}")
 
-            # Hash the password
-            password = "Admin2024!"  # Change this immediately after first login!
-            password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
-
-            # Create admin user
-            admin = User(
-                email="admin@sistemaslab.dev",
-                hashed_password=password_hash.decode("utf-8"),
-                full_name="System Administrator",
-                role="admin",
-                is_active=True,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-            )
-
-            session.add(admin)
+            role = await _ensure_admin_role(session)
+            await _ensure_admin_assignment(session, admin, role)
             await session.commit()
-
-            print("✅ Admin user created successfully!")
-            print("   Email: admin@sistemaslab.dev")
-            print("   Password: Admin2024!")
-            print(
-                "   ⚠️  IMPORTANT: Change this password immediately after first login!"
-            )
-
-        except Exception as e:
-            print(f"❌ Error creating admin user: {e}")
+        except Exception:
             await session.rollback()
             raise
         finally:

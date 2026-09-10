@@ -1,5 +1,13 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
+
+
+# Design.md D9: DIRECTOR is read-only (never an approver) and ADMINISTRATIVO
+# is deprecated/non-assignable, so neither is a valid landing role for a
+# legacy admin fallback anymore. Only the two read-only business top roles
+# remain eligible.
+LEGACY_ADMIN_FALLBACK_ALLOWED_ROLES = {"DECANO", "DUEÑO"}
 
 
 class Settings(BaseSettings):
@@ -15,6 +23,20 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+
+    # Bootstrap RBAC admin
+    bootstrap_admin_email: str = "admin@sistemaslab.dev"
+    bootstrap_admin_full_name: str = "System Administrator"
+    bootstrap_admin_password: str = ""
+    legacy_admin_fallback_role: str = "DECANO"
+
+    @field_validator("legacy_admin_fallback_role")
+    @classmethod
+    def validate_legacy_admin_fallback_role(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in LEGACY_ADMIN_FALLBACK_ALLOWED_ROLES:
+            raise ValueError("LEGACY_ADMIN_FALLBACK_ROLE must be a non-system business role")
+        return normalized
 
     # CORS
     cors_origins: str = "http://localhost:4200"

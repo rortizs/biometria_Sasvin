@@ -54,56 +54,79 @@ import { NotificationBellComponent } from '../../../../core/components/notificat
 
       <!-- Navigation -->
       <nav class="nav-cards">
-        <a routerLink="/admin/employees" class="nav-card">
-          <div class="nav-icon">👥</div>
-          <h3>Empleados</h3>
-          <p>Gestionar empleados y registrar rostros</p>
-        </a>
+        @if (authService.hasPermission('employees.manage.catedratico')) {
+          <a routerLink="/admin/employees" class="nav-card">
+            <div class="nav-icon">👥</div>
+            <h3>Empleados</h3>
+            <p>Gestionar empleados y registrar rostros</p>
+          </a>
+        }
         <a routerLink="/admin/attendance" class="nav-card">
           <div class="nav-icon">📋</div>
           <h3>Asistencia</h3>
           <p>Ver registros de asistencia</p>
         </a>
-        <a routerLink="/admin/locations" class="nav-card">
-          <div class="nav-icon">📍</div>
-          <h3>Sedes</h3>
-          <p>Gestionar ubicaciones y geolocalización</p>
-        </a>
-        <a routerLink="/admin/schedules" class="nav-card">
-          <div class="nav-icon">📅</div>
-          <h3>Horarios</h3>
-          <p>Calendario y patrones de horarios</p>
-        </a>
-        <a routerLink="/admin/departments" class="nav-card">
-          <div class="nav-icon">🏛️</div>
-          <h3>Departamentos</h3>
-          <p>Gestionar facultades y departamentos</p>
-        </a>
-        <a routerLink="/admin/positions" class="nav-card">
-          <div class="nav-icon">🎓</div>
-          <h3>Puestos</h3>
-          <p>Gestionar cargos y puestos</p>
-        </a>
-        <a routerLink="/admin/permission-requests" class="nav-card">
-          <div class="nav-icon">📝</div>
-          <h3>Solicitudes</h3>
-          <p>Revisar y aprobar permisos</p>
-        </a>
+        @if (authService.hasPermission('locations.create')) {
+          <a routerLink="/admin/locations" class="nav-card">
+            <div class="nav-icon">📍</div>
+            <h3>Sedes</h3>
+            <p>Gestionar ubicaciones y geolocalización</p>
+          </a>
+        }
+        @if (authService.hasPermission('schedules.create')) {
+          <a routerLink="/admin/schedules" class="nav-card">
+            <div class="nav-icon">📅</div>
+            <h3>Horarios</h3>
+            <p>Calendario y patrones de horarios</p>
+          </a>
+        }
+        @if (authService.hasPermission('departments.create')) {
+          <a routerLink="/admin/departments" class="nav-card">
+            <div class="nav-icon">🏛️</div>
+            <h3>Departamentos</h3>
+            <p>Gestionar facultades y departamentos</p>
+          </a>
+        }
+        @if (authService.hasPermission('positions.create')) {
+          <a routerLink="/admin/positions" class="nav-card">
+            <div class="nav-icon">🎓</div>
+            <h3>Puestos</h3>
+            <p>Gestionar cargos y puestos</p>
+          </a>
+        }
+        @if (authService.hasPermission('permission_requests.view')) {
+          <a routerLink="/admin/permission-requests" class="nav-card">
+            <div class="nav-icon">📝</div>
+            <h3>Solicitudes</h3>
+            <p>Revisar y aprobar permisos</p>
+          </a>
+        }
         <a routerLink="/admin/roles" class="nav-card">
           <div class="nav-icon">🔑</div>
           <h3>Roles</h3>
           <p>Gestión de roles y permisos RBAC</p>
         </a>
-        <a routerLink="/admin/users" class="nav-card">
-          <div class="nav-icon">🛡️</div>
-          <h3>Usuarios</h3>
-          <p>Gestionar usuarios del sistema</p>
-        </a>
-        <a routerLink="/admin/settings" class="nav-card">
-          <div class="nav-icon">⚙️</div>
-          <h3>Configuración</h3>
-          <p>Ajustes de la institución</p>
-        </a>
+        @if (authService.hasPermission('users.view')) {
+          <a routerLink="/admin/users" class="nav-card">
+            <div class="nav-icon">🛡️</div>
+            <h3>Usuarios</h3>
+            <p>Gestionar usuarios del sistema</p>
+          </a>
+        }
+        @if (authService.hasPermission('settings.update')) {
+          <a routerLink="/admin/settings" class="nav-card">
+            <div class="nav-icon">⚙️</div>
+            <h3>Configuración</h3>
+            <p>Ajustes de la institución</p>
+          </a>
+        }
+        @if (authService.hasPermission('user_scopes.manage')) {
+          <a routerLink="/admin/user-scopes" class="nav-card">
+            <div class="nav-icon">🗺️</div>
+            <h3>Alcances</h3>
+            <p>Asignar coordinadores, directores y secretarías a su alcance</p>
+          </a>
+        }
       </nav>
 
       <!-- Today's attendance -->

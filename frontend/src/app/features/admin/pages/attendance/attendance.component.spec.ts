@@ -5,6 +5,7 @@ import { Subject, of } from 'rxjs';
 import { AttendanceComponent } from './attendance.component';
 import type { AttendanceRecord } from '../../../../core/models/attendance.model';
 import { AttendanceService } from '../../../../core/services/attendance.service';
+import { AuthService } from '../../../../core/services/auth.service';
 import { DepartmentService } from '../../../../core/services/department.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { NotificationService } from '../../../../core/services/notification.service';
@@ -30,14 +31,29 @@ describe('AttendanceComponent', () => {
   let fixture: ComponentFixture<AttendanceComponent>;
   let component: AttendanceComponent;
   let attendanceServiceSpy: jasmine.SpyObj<AttendanceService>;
+  let authServiceSpy: jasmine.SpyObj<AuthService>;
   let serviceRecords: AttendanceRecord[];
+  let grantedPermissions: string[];
 
-  beforeEach(async () => {
-    serviceRecords = [baseRecord];
+  function configureTestBed(): void {
+    TestBed.configureTestingModule({
+      imports: [AttendanceComponent],
+      providers: [
+        provideRouter([]),
+        { provide: AttendanceService, useValue: attendanceServiceSpy },
+        { provide: EmployeeService, useValue: employeeServiceSpyFactory() },
+        { provide: DepartmentService, useValue: departmentServiceSpyFactory() },
+        { provide: AuthService, useValue: authServiceSpy },
+        { provide: NotificationService, useValue: notificationServiceSpyFactory() },
+        {
+          provide: WebSocketNotificationService,
+          useValue: { notifications$: new Subject() },
+        },
+      ],
+    });
+  }
 
-    attendanceServiceSpy = jasmine.createSpyObj('AttendanceService', ['getAttendance']);
-    attendanceServiceSpy.getAttendance.and.callFake(() => of(serviceRecords));
-
+  function employeeServiceSpyFactory() {
     const employeeServiceSpy = jasmine.createSpyObj('EmployeeService', ['getAll']);
     employeeServiceSpy.getAll.and.returnValue(
       of([
@@ -56,7 +72,10 @@ describe('AttendanceComponent', () => {
         },
       ]),
     );
+    return employeeServiceSpy;
+  }
 
+  function departmentServiceSpyFactory() {
     const departmentServiceSpy = jasmine.createSpyObj('DepartmentService', ['getDepartments']);
     departmentServiceSpy.getDepartments.and.returnValue(
       of([
@@ -64,7 +83,10 @@ describe('AttendanceComponent', () => {
         { id: 'department-2', name: 'Administración' },
       ]),
     );
+    return departmentServiceSpy;
+  }
 
+  function notificationServiceSpyFactory() {
     const notificationServiceSpy = jasmine.createSpyObj('NotificationService', [
       'getAll',
       'markRead',
@@ -73,21 +95,21 @@ describe('AttendanceComponent', () => {
     notificationServiceSpy.getAll.and.returnValue(of([]));
     notificationServiceSpy.markRead.and.returnValue(of({}));
     notificationServiceSpy.markAllRead.and.returnValue(of(void 0));
+    return notificationServiceSpy;
+  }
 
-    await TestBed.configureTestingModule({
-      imports: [AttendanceComponent],
-      providers: [
-        provideRouter([]),
-        { provide: AttendanceService, useValue: attendanceServiceSpy },
-        { provide: EmployeeService, useValue: employeeServiceSpy },
-        { provide: DepartmentService, useValue: departmentServiceSpy },
-        { provide: NotificationService, useValue: notificationServiceSpy },
-        {
-          provide: WebSocketNotificationService,
-          useValue: { notifications$: new Subject() },
-        },
-      ],
-    }).compileComponents();
+  beforeEach(async () => {
+    serviceRecords = [baseRecord];
+    grantedPermissions = ['attendance.view', 'attendance.export'];
+
+    attendanceServiceSpy = jasmine.createSpyObj('AttendanceService', ['getAttendance']);
+    attendanceServiceSpy.getAttendance.and.callFake(() => of(serviceRecords));
+
+    authServiceSpy = jasmine.createSpyObj('AuthService', ['hasPermission']);
+    authServiceSpy.hasPermission.and.callFake((code: string) => grantedPermissions.includes(code));
+
+    configureTestBed();
+    await TestBed.compileComponents();
 
     fixture = TestBed.createComponent(AttendanceComponent);
     component = fixture.componentInstance;
@@ -189,5 +211,42 @@ describe('AttendanceComponent', () => {
 
     expect(rows[0]).toContain('"Ana López","21/07/2026"');
     expect(rows[1]).toContain('"Bruno García","22/07/2026"');
+  });
+
+  describe('export gating (task 4.5 — attendance.export permission)', () => {
+    it('hides the CSV export button for an actor without attendance.export (e.g. COORDINADOR)', () => {
+      grantedPermissions = ['attendance.view'];
+
+      fixture.detectChanges();
+
+      expect(authServiceSpy.hasPermission).toHaveBeenCalledWith('attendance.export');
+      const exportButton = fixture.nativeElement.querySelector('.export-btn');
+      expect(exportButton).toBeNull();
+    });
+
+    it('shows the CSV export button for an actor granted attendance.export', () => {
+      grantedPermissions = ['attendance.view', 'attendance.export'];
+
+      fixture.detectChanges();
+
+      const exportButton = fixture.nativeElement.querySelector('.export-btn');
+      expect(exportButton).not.toBeNull();
+    });
+
+    it('canExport() reflects a denied hasPermission(attendance.export) call', () => {
+      grantedPermissions = ['attendance.view'];
+
+      fixture.detectChanges();
+
+      expect(component.canExport()).toBeFalse();
+    });
+
+    it('canExport() reflects a granted hasPermission(attendance.export) call', () => {
+      grantedPermissions = ['attendance.view', 'attendance.export'];
+
+      fixture.detectChanges();
+
+      expect(component.canExport()).toBeTrue();
+    });
   });
 });

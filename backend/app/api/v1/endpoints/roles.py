@@ -6,7 +6,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin, get_current_user
+from app.api.deps import (
+    ensure_can_assign_role,
+    get_db,
+    get_current_technical_rbac_admin,
+    protect_bootstrap_admin_mutation,
+    settings,
+)
 from app.models.role import Role
 from app.models.permission import Permission
 from app.models.role_permission import UserRoleAssignment
@@ -42,9 +48,11 @@ async def _get_role_or_404(db: AsyncSession, role_id: UUID) -> Role:
 @router.get("/", response_model=list[RoleResponse])
 async def list_roles(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     active_only: bool = True,
+    configured_settings=settings,
 ) -> list[Role]:
+    await get_current_technical_rbac_admin(current_user, configured_settings)
     query = select(Role)
     if active_only:
         query = query.where(Role.is_active == True)
@@ -55,18 +63,24 @@ async def list_roles(
 @router.get("/{role_id}", response_model=RoleResponse)
 async def get_role(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     role_id: UUID,
+    configured_settings=settings,
 ) -> Role:
+    await get_current_technical_rbac_admin(current_user, configured_settings)
     return await _get_role_or_404(db, role_id)
 
 
 @router.post("/", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
 async def create_role(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     role_in: RoleCreate,
+    configured_settings=settings,
 ) -> Role:
+    await get_current_technical_rbac_admin(current_user, configured_settings)
+    ensure_can_assign_role(current_user, role_in.name, configured_settings)
+
     existing = await db.execute(select(Role).where(Role.name == role_in.name))
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -91,11 +105,15 @@ async def create_role(
 @router.patch("/{role_id}", response_model=RoleResponse)
 async def update_role(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     role_id: UUID,
     role_in: RoleUpdate,
+    configured_settings=settings,
 ) -> Role:
+    await get_current_technical_rbac_admin(current_user, configured_settings)
     role = await _get_role_or_404(db, role_id)
+    if role_in.name is not None:
+        ensure_can_assign_role(current_user, role_in.name, configured_settings)
 
     update_data = role_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -109,9 +127,11 @@ async def update_role(
 @router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_role(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     role_id: UUID,
+    configured_settings=settings,
 ) -> None:
+    await get_current_technical_rbac_admin(current_user, configured_settings)
     role = await _get_role_or_404(db, role_id)
     await db.delete(role)
     await db.commit()
@@ -120,10 +140,12 @@ async def delete_role(
 @router.put("/{role_id}/permissions", response_model=RoleResponse)
 async def set_role_permissions(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     role_id: UUID,
     permission_ids: list[UUID],
+    configured_settings=settings,
 ) -> Role:
+    await get_current_technical_rbac_admin(current_user, configured_settings)
     role = await _get_role_or_404(db, role_id)
 
     perms = await db.execute(
@@ -143,9 +165,16 @@ async def set_role_permissions(
 @router.get("/users/{user_id}/roles", response_model=list[UserRoleAssignmentResponse])
 async def get_user_roles(
     db: Annotated[AsyncSession, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     user_id: UUID,
+    configured_settings=settings,
 ) -> list[UserRoleAssignment]:
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    target_user = user_result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    protect_bootstrap_admin_mutation(target_user, current_user, configured_settings)
+
     result = await db.execute(
         select(UserRoleAssignment)
         .where(UserRoleAssignment.user_id == user_id)
@@ -157,14 +186,18 @@ async def get_user_roles(
 @router.put("/users/{user_id}/roles", response_model=list[UserRoleAssignmentResponse])
 async def assign_user_roles(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
     user_id: UUID,
     payload: UserRoleAssign,
+    configured_settings=settings,
 ) -> list[UserRoleAssignment]:
+    await get_current_technical_rbac_admin(current_user, configured_settings)
     # Verify target user exists
     user_result = await db.execute(select(User).where(User.id == user_id))
-    if not user_result.scalar_one_or_none():
+    target_user = user_result.scalar_one_or_none()
+    if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    protect_bootstrap_admin_mutation(target_user, current_user, configured_settings)
 
     # Validate requested roles exist
     roles_result = await db.execute(
@@ -176,6 +209,9 @@ async def assign_user_roles(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="One or more role IDs are invalid",
         )
+
+    for role in roles:
+        ensure_can_assign_role(current_user, role.name, configured_settings)
 
     # Business rule: single-role constraint for secretaria/catedratico
     if len(payload.role_ids) > 1:

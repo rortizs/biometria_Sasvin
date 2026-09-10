@@ -7,11 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin, get_current_user
+from app.api.deps import (
+    assert_object_access,
+    get_db,
+    get_optional_current_user,
+    require_permission,
+    user_has_role,
+)
 from app.models.attendance import AttendanceRecord
 from app.models.employee import Employee
 from app.models.location import Location
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.attendance import (
     AttendanceCheckIn,
     AttendanceCheckOut,
@@ -83,6 +89,28 @@ def _reject_if_outside_perimeter(distance: float | None) -> None:
     )
 
 
+def _enforce_self_scope_if_catedratico(actor: User | None, employee_id) -> None:
+    """Spec (attendance-access-control, "Teacher Attendance Scope"):
+    "CATEDRATICO marks own attendance" -- allow when the check-in/check-out
+    targets the actor's own employee identity, deny when it targets a
+    different employee's record.
+
+    Only enforced when an authenticated actor is actually present (see
+    `get_optional_current_user`'s docstring: `/check-in`/`/check-out`
+    remain intentionally reachable without authentication for the shared
+    face-recognition kiosk device) and only when that actor holds
+    CATEDRATICO -- other authenticated roles (e.g. an administrator
+    supervising a shared kiosk device while logged into their own
+    dashboard session) are unaffected, matching design.md's Corrected
+    Role Matrix, which scopes only CATEDRATICO's own attendance.
+    """
+    if actor is None:
+        return
+    if not user_has_role(actor, UserRole.CATEDRATICO):
+        return
+    assert_object_access(actor, employee_id=employee_id)
+
+
 def _reject_if_not_live(face_service: FaceRecognitionService, embeddings: list) -> None:
     """Reject static/spoofed frames after identity and geolocation are valid."""
     if len(embeddings) < 2:
@@ -102,6 +130,13 @@ def _reject_if_not_live(face_service: FaceRecognitionService, embeddings: list) 
     tags=["attendance"],
     responses={
         400: {"description": "No se detectó rostro en la imagen o error al procesarla"},
+        403: {
+            "description": (
+                "Fuera del perímetro permitido, o el actor autenticado tiene rol "
+                "CATEDRATICO y el rostro identificado no corresponde a su propio "
+                "registro de empleado"
+            )
+        },
         404: {"description": "Ningún empleado coincide con el rostro enviado"},
         422: {
             "description": "Error de validación — coordenadas inválidas o imágenes faltantes"
@@ -111,11 +146,18 @@ def _reject_if_not_live(face_service: FaceRecognitionService, embeddings: list) 
 async def check_in(
     db: Annotated[AsyncSession, Depends(get_db)],
     request: AttendanceCheckIn,
+    current_user: Annotated[User | None, Depends(get_optional_current_user)] = None,
 ) -> AttendanceResponse:
     """
     Registrar entrada de un catedrático por reconocimiento facial.
 
     No requiere autenticación. El rostro en las imágenes es la credencial.
+    Si la petición sí incluye un token Bearer válido (p. ej. el interceptor
+    del frontend lo adjunta automáticamente cuando el navegador ya tiene
+    sesión activa) y ese actor tiene el rol CATEDRATICO, el backend
+    verifica que el empleado identificado por el rostro sea el propio
+    empleado del actor (403 en caso contrario) -- otros roles autenticados
+    no se ven afectados.
 
     **Proceso interno:**
     1. Extrae el embedding facial de `images[0]` usando dlib (face_recognition)
@@ -161,6 +203,8 @@ async def check_in(
         )
 
     employee, confidence = match
+    _enforce_self_scope_if_catedratico(current_user, employee.id)
+
     today = date.today()
     now = datetime.utcnow()
 
@@ -266,11 +310,18 @@ async def check_in(
 async def check_out(
     db: Annotated[AsyncSession, Depends(get_db)],
     request: AttendanceCheckOut,
+    current_user: Annotated[User | None, Depends(get_optional_current_user)] = None,
 ) -> AttendanceResponse:
     """
     Registrar salida de un catedrático por reconocimiento facial.
 
     No requiere autenticación. El rostro en las imágenes es la credencial.
+    Si la petición sí incluye un token Bearer válido (p. ej. el interceptor
+    del frontend lo adjunta automáticamente cuando el navegador ya tiene
+    sesión activa) y ese actor tiene el rol CATEDRATICO, el backend
+    verifica que el empleado identificado por el rostro sea el propio
+    empleado del actor (403 en caso contrario) -- otros roles autenticados
+    no se ven afectados.
 
     **Proceso interno:**
     1. Identifica al empleado por reconocimiento facial (igual que check-in)
@@ -315,6 +366,8 @@ async def check_out(
         )
 
     employee, confidence = match
+    _enforce_self_scope_if_catedratico(current_user, employee.id)
+
     today = date.today()
     now = datetime.utcnow()
 
@@ -410,11 +463,12 @@ async def check_out(
     tags=["attendance"],
     responses={
         401: {"description": "Token inválido o expirado"},
+        403: {"description": "El actor no tiene el permiso attendance.view"},
     },
 )
 async def list_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_permission("attendance.view"))],
     record_date: date | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -424,7 +478,12 @@ async def list_attendance(
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[AttendanceResponse]:
     """
-    Listar registros de asistencia con filtros opcionales. Requiere autenticación.
+    Listar registros de asistencia con filtros opcionales.
+
+    Requiere el permiso `attendance.view` (lectura de reportes de asistencia
+    para `DECANO`/`DUEÑO`/`DIRECTOR`/`COORDINADOR`/`ADMIN`/`DEV` -- no existe
+    acción de exportación o edición en este módulo, por lo que la restricción
+    de solo-lectura de la especificación se cumple estructuralmente).
 
     **Filtros disponibles (todos opcionales, combinables):**
     - `record_date` — fecha exacta (YYYY-MM-DD)
@@ -486,14 +545,17 @@ async def list_attendance(
     tags=["attendance"],
     responses={
         401: {"description": "Token inválido o expirado"},
+        403: {"description": "El actor no tiene el permiso attendance.view"},
     },
 )
 async def list_today_attendance(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_permission("attendance.view"))],
 ) -> list[AttendanceResponse]:
     """
-    Listar todos los registros de asistencia del día de hoy. Requiere autenticación.
+    Listar todos los registros de asistencia del día de hoy.
+
+    Requiere el permiso `attendance.view` (mismo gate que `GET /`).
 
     Shortcut de `GET /` filtrado por la fecha actual del servidor.
     Los resultados se ordenan por hora de check-in descendente (el más reciente primero).

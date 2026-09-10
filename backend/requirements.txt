@@ -8,6 +8,7 @@ sqlalchemy>=2.0.0
 alembic>=1.13.0
 asyncpg>=0.29.0
 pgvector>=0.2.0
+greenlet>=3.0.0  # required by SQLAlchemy's asyncio extension (AsyncSession/AsyncEngine)
 
 # Pydantic
 pydantic>=2.0.0
@@ -35,3 +36,4 @@ setuptools>=70.0.0  # Required for face_recognition_models in Python 3.12+
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
 httpx>=0.26.0
+aiosqlite>=0.20.0  # in-memory async SQLite engine for real-DB constraint tests

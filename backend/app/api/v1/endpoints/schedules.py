@@ -7,7 +7,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_active_admin, get_current_user, get_current_secretaria_or_above
+from app.api.deps import get_db, get_current_user, require_permission
 from app.models.schedule import (
     Schedule,
     EmployeeSchedule,
@@ -50,12 +50,13 @@ router = APIRouter()
 )
 async def list_schedule_patterns(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Schedule]:
     """
-    Listar patrones de horario reutilizables.
+    Listar patrones de horario reutilizables. Requiere autenticación.
 
     Un patrón define horario de entrada/salida y se puede asignar a uno o varios
     empleados para días específicos. Ejemplos: "Turno Mañana 7-13h", "Turno Tarde 14-20h".
@@ -78,9 +79,10 @@ async def list_schedule_patterns(
 )
 async def get_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     pattern_id: UUID,
 ) -> Schedule:
-    """Obtener un patrón de horario por su UUID."""
+    """Obtener un patrón de horario por su UUID. Requiere autenticación."""
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
@@ -102,10 +104,10 @@ async def get_schedule_pattern(
 )
 async def create_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("schedules.create"))],
     pattern_in: ScheduleCreate,
 ) -> Schedule:
-    """Crear un nuevo patrón de horario reutilizable. Requiere rol secretaria o superior. El nombre debe ser único."""
+    """Crear un nuevo patrón de horario reutilizable. Requiere el permiso `schedules.create`. El nombre debe ser único."""
     result = await db.execute(select(Schedule).where(Schedule.name == pattern_in.name))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -131,11 +133,11 @@ async def create_schedule_pattern(
 )
 async def update_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("schedules.update"))],
     pattern_id: UUID,
     pattern_in: ScheduleUpdate,
 ) -> Schedule:
-    """Actualizar un patrón de horario parcialmente. Requiere rol secretaria o superior."""
+    """Actualizar un patrón de horario parcialmente. Requiere el permiso `schedules.update`."""
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
@@ -163,10 +165,10 @@ async def update_schedule_pattern(
 )
 async def delete_schedule_pattern(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("schedules.delete"))],
     pattern_id: UUID,
 ) -> None:
-    """Eliminar un patrón de horario. Requiere rol admin."""
+    """Eliminar un patrón de horario. Requiere el permiso `schedules.delete`."""
     result = await db.execute(select(Schedule).where(Schedule.id == pattern_id))
     pattern = result.scalar_one_or_none()
     if not pattern:
@@ -187,12 +189,13 @@ async def delete_schedule_pattern(
 )
 async def list_assignments(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     employee_id: UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[ScheduleAssignment]:
     """
-    Listar asignaciones de horario con filtros opcionales.
+    Listar asignaciones de horario con filtros opcionales. Requiere autenticación.
 
     Las asignaciones vinculan un patrón de horario a un empleado para una fecha concreta.
     Filtros disponibles: `employee_id`, `date_from`, `date_to` (todos opcionales, combinables).
@@ -223,11 +226,11 @@ async def list_assignments(
 )
 async def create_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("schedules.create"))],
     assignment_in: ScheduleAssignmentCreate,
 ) -> ScheduleAssignment:
     """
-    Asignar un patrón de horario a un empleado para una fecha específica. Requiere rol secretaria o superior.
+    Asignar un patrón de horario a un empleado para una fecha específica. Requiere el permiso `schedules.create`.
 
     Comportamiento upsert: si ya existe una asignación para ese empleado y fecha,
     la actualiza en lugar de crear un duplicado.
@@ -277,11 +280,11 @@ async def create_assignment(
 )
 async def create_bulk_assignments(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("schedules.create"))],
     bulk_in: BulkAssignmentCreate,
 ) -> dict:
     """
-    Asignar un patrón de horario a múltiples empleados y fechas en una sola llamada. Requiere rol secretaria o superior.
+    Asignar un patrón de horario a múltiples empleados y fechas en una sola llamada. Requiere el permiso `schedules.create`.
 
     Útil para configurar horarios semanales o quincenales en bloque.
     Acepta listas de `employee_ids` y `dates` — genera el producto cartesiano de ambas.
@@ -334,10 +337,10 @@ async def create_bulk_assignments(
 )
 async def delete_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("schedules.delete"))],
     assignment_id: UUID,
 ) -> None:
-    """Eliminar una asignación de horario. Requiere rol admin."""
+    """Eliminar una asignación de horario. Requiere el permiso `schedules.delete`."""
     result = await db.execute(
         select(ScheduleAssignment).where(ScheduleAssignment.id == assignment_id)
     )
@@ -360,13 +363,14 @@ async def delete_assignment(
 )
 async def list_exceptions(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     employee_id: UUID | None = None,
     exception_type: ExceptionTypeEnum | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[ScheduleException]:
     """
-    Listar excepciones de horario con filtros opcionales.
+    Listar excepciones de horario con filtros opcionales. Requiere autenticación.
 
     Tipos de excepción disponibles (`exception_type`):
     - `vacation` — vacaciones
@@ -411,11 +415,11 @@ async def list_exceptions(
 )
 async def create_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("schedules.create"))],
     exception_in: ScheduleExceptionCreate,
 ) -> ScheduleException:
     """
-    Crear una excepción de horario. Requiere rol secretaria o superior.
+    Crear una excepción de horario. Requiere el permiso `schedules.create`.
 
     Tipos disponibles: `vacation`, `holiday`, `sick_leave`, `permission`, `other`.
 
@@ -446,11 +450,11 @@ async def create_exception(
 )
 async def update_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("schedules.update"))],
     exception_id: UUID,
     exception_in: ScheduleExceptionUpdate,
 ) -> ScheduleException:
-    """Actualizar una excepción de horario parcialmente. Requiere rol secretaria o superior."""
+    """Actualizar una excepción de horario parcialmente. Requiere el permiso `schedules.update`."""
     result = await db.execute(
         select(ScheduleException).where(ScheduleException.id == exception_id)
     )
@@ -480,10 +484,10 @@ async def update_exception(
 )
 async def delete_exception(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("schedules.delete"))],
     exception_id: UUID,
 ) -> None:
-    """Eliminar una excepción de horario. Requiere rol admin."""
+    """Eliminar una excepción de horario. Requiere el permiso `schedules.delete`."""
     result = await db.execute(
         select(ScheduleException).where(ScheduleException.id == exception_id)
     )

@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import { forkJoin } from 'rxjs';
 import { AttendanceService } from '../../../../core/services/attendance.service';
+import { AuthService } from '../../../../core/services/auth.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { DepartmentService } from '../../../../core/services/department.service';
 import { AttendanceRecord, AttendanceStatus } from '../../../../core/models/attendance.model';
@@ -45,10 +46,12 @@ interface AttendanceSummary {
         </div>
         <div class="header-actions" style="display:flex;align-items:center;gap:0.75rem;">
           <app-notification-bell />
-          <button class="export-btn" (click)="exportToCSV()" [disabled]="loading() || filteredAttendance().length === 0">
-          <span class="export-icon">&#8681;</span>
-          Exportar CSV
-        </button>
+          @if (canExport()) {
+            <button class="export-btn" (click)="exportToCSV()" [disabled]="loading() || filteredAttendance().length === 0">
+              <span class="export-icon">&#8681;</span>
+              Exportar CSV
+            </button>
+          }
         </div>
       </header>
 
@@ -953,8 +956,23 @@ interface AttendanceSummary {
 })
 export class AttendanceComponent implements OnInit {
   private readonly attendanceService = inject(AttendanceService);
+  private readonly authService = inject(AuthService);
   private readonly employeeService = inject(EmployeeService);
   private readonly departmentService = inject(DepartmentService);
+
+  /**
+   * Gates the CSV export button on the real backend permission code
+   * (`attendance.export`, seeded by `9f8e7d6c5b4a`). Migration
+   * `202606181200` deliberately does NOT grant `attendance.export` to any
+   * of `DECANO`/`DUEÑO`/`DIRECTOR`/`COORDINADOR` (spec: "Administrative
+   * Attendance Access" — "the backend MUST deny any create, update,
+   * delete, or export action on that report", uniformly, no exception for
+   * any of the four read-only roles). `attendance.py` has no export route
+   * at all, so this is a UI-visibility match for a 403 that would
+   * otherwise be structural, not a functional gate on its own — the
+   * backend stays authoritative (spec: "Attendance Backend Enforcement").
+   */
+  readonly canExport = computed(() => this.authService.hasPermission('attendance.export'));
 
   // Signals for state management
   readonly attendance = signal<AttendanceRecord[]>([]);

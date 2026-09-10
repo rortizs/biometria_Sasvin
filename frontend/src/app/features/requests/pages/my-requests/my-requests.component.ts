@@ -13,7 +13,9 @@ import {
 import { Employee } from '../../../../core/models/employee.model';
 import { EXCEPTION_TYPE_LABELS, ExceptionType } from '../../../../core/models/schedule.model';
 
-const ADMIN_ROLES = ['admin', 'director', 'coordinador', 'secretaria'];
+// Casing-only fix, mirrors auth.guard.ts's ADMIN_ROLES (task 4.3) — same
+// 4-role set, canonical uppercase (user.model.ts's UserRole).
+const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINADOR', 'SECRETARIA'];
 
 @Component({
   selector: 'app-my-requests',
