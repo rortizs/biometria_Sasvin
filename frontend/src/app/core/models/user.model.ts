@@ -10,6 +10,17 @@ export interface User {
   updated_at: string;
 }
 
+// `/auth/me`-only wire shape (backend/app/schemas/user.py's
+// `AuthMeResponse(UserResponse)`, task 4.3a). Adds the current user's
+// deduplicated, sorted granted permission codes so the frontend can gate
+// guards/UI by permission code instead of hardcoding a role→permission map
+// that would drift from the admin-configurable Roles UI. No other endpoint
+// (`GET /users/`, `PATCH /users/{id}`, etc.) returns this shape — those
+// still resolve to plain `User`.
+export interface AuthMeResponse extends User {
+  permissions: string[];
+}
+
 // Canonical roles (design.md, "Canonical Roles" spec requirement). Mirrors
 // backend/app/models/user.py's `UserRole` enum values exactly — these are
 // the uppercase strings the backend actually serializes on the wire

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { Router, provideRouter } from '@angular/router';
-import { adminGuard, guestGuard } from './auth.guard';
+import { ActivatedRouteSnapshot, Router, provideRouter } from '@angular/router';
+import { adminGuard, guestGuard, permissionGuard } from './auth.guard';
 import { AuthService } from '../services/auth.service';
 import { User } from '../models/user.model';
 
@@ -14,11 +14,17 @@ import { User } from '../models/user.model';
 // without ever producing a compile error (`.includes()` on a `string[]`
 // literal is not type-checked against `UserRole`).
 describe('auth.guard', () => {
-  function setupWithUser(user: User | null): { router: Router } {
-    const authServiceSpy = jasmine.createSpyObj('AuthService', ['getAccessToken'], {
-      user: signal(user),
-    });
+  function setupWithUser(
+    user: User | null,
+    permissions: string[] = []
+  ): { router: Router } {
+    const authServiceSpy = jasmine.createSpyObj(
+      'AuthService',
+      ['getAccessToken', 'hasPermission'],
+      { user: signal(user) }
+    );
     authServiceSpy.getAccessToken.and.returnValue(user ? 'fake-token' : null);
+    authServiceSpy.hasPermission.and.callFake((code: string) => permissions.includes(code));
 
     TestBed.configureTestingModule({
       providers: [
@@ -28,6 +34,10 @@ describe('auth.guard', () => {
     });
 
     return { router: TestBed.inject(Router) };
+  }
+
+  function routeWithPermission(permission: string | undefined): ActivatedRouteSnapshot {
+    return { data: { permission } } as unknown as ActivatedRouteSnapshot;
   }
 
   function buildUser(role: User['role']): User {
@@ -73,6 +83,35 @@ describe('auth.guard', () => {
       const navigateSpy = spyOn(router, 'navigate');
       TestBed.runInInjectionContext(() => guestGuard({} as never, {} as never));
       expect(navigateSpy).toHaveBeenCalledWith(['/requests']);
+    });
+  });
+
+  // Task 4.3: permission-code-keyed route guard, reads `route.data['permission']`
+  // and checks it against `AuthService.hasPermission()` instead of a role name.
+  describe('permissionGuard', () => {
+    it('allows a user whose granted permissions include the route\'s required code', () => {
+      setupWithUser(buildUser('COORDINADOR'), ['user_scopes.manage']);
+      const route = routeWithPermission('user_scopes.manage');
+      const result = TestBed.runInInjectionContext(() => permissionGuard(route, {} as never));
+      expect(result).toBe(true);
+    });
+
+    it('denies a user missing the required permission and redirects to /requests', () => {
+      const { router } = setupWithUser(buildUser('CATEDRATICO'), ['attendance.mark.self']);
+      const navigateSpy = spyOn(router, 'navigate');
+      const route = routeWithPermission('user_scopes.manage');
+      const result = TestBed.runInInjectionContext(() => permissionGuard(route, {} as never));
+      expect(result).toBe(false);
+      expect(navigateSpy).toHaveBeenCalledWith(['/requests']);
+    });
+
+    it('redirects an unauthenticated request to /auth/login', () => {
+      const { router } = setupWithUser(null);
+      const navigateSpy = spyOn(router, 'navigate');
+      const route = routeWithPermission('user_scopes.manage');
+      const result = TestBed.runInInjectionContext(() => permissionGuard(route, {} as never));
+      expect(result).toBe(false);
+      expect(navigateSpy).toHaveBeenCalledWith(['/auth/login']);
     });
   });
 });

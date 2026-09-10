@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { User, LoginRequest, TokenResponse } from '../models/user.model';
+import { AuthMeResponse, User, LoginRequest, TokenResponse } from '../models/user.model';
 import { WebSocketNotificationService } from './websocket-notification.service';
 
 const ACCESS_TOKEN_KEY = 'access_token';
@@ -20,9 +20,15 @@ export class AuthService {
 
   private readonly currentUser = signal<User | null>(null);
   private readonly isLoading = signal(false);
+  // `/auth/me`'s granted permission codes (task 4.3a's `AuthMeResponse`).
+  // Populated atomically alongside `currentUser` from the same response, so
+  // any consumer that has already observed a non-null `user()` can rely on
+  // `permissions()`/`hasPermission()` being in sync with it.
+  private readonly userPermissions = signal<string[]>([]);
 
   readonly user = this.currentUser.asReadonly();
   readonly loading = this.isLoading.asReadonly();
+  readonly permissions = this.userPermissions.asReadonly();
   readonly isAuthenticated = computed(() => !!this.currentUser());
   // Canonical uppercase roles (user.model.ts's `UserRole`, design.md "Canonical
   // Roles"). Casing fixed 1:1 with the pre-migration literals below — no
@@ -34,6 +40,13 @@ export class AuthService {
   readonly isAdmin = computed(() => this.currentUser()?.role === 'ADMIN');
   readonly isCoordinadorOrAbove = computed(() => ['ADMIN', 'DIRECTOR', 'COORDINADOR'].includes(this.currentUser()?.role ?? ''));
   readonly mustChangePassword = computed(() => this.currentUser()?.must_change_password ?? false);
+
+  /** Checks a granted permission code (design.md's permission-code model,
+   * `/auth/me`'s `permissions: string[]`) instead of matching a role name.
+   * Returns `false` before `/auth/me` resolves or when unauthenticated. */
+  hasPermission(code: string): boolean {
+    return this.userPermissions().includes(code);
+  }
 
   constructor() {
     this.loadCurrentUser();
@@ -65,6 +78,7 @@ export class AuthService {
     this.wsNotif.disconnect();
     this.clearTokens();
     this.currentUser.set(null);
+    this.userPermissions.set([]);
     this.router.navigate(['/auth/login']);
   }
 
@@ -106,9 +120,10 @@ export class AuthService {
       return;
     }
 
-    this.http.get<User>(`${this.baseUrl}/auth/me`).subscribe({
+    this.http.get<AuthMeResponse>(`${this.baseUrl}/auth/me`).subscribe({
       next: (user) => {
         this.currentUser.set(user);
+        this.userPermissions.set(user.permissions ?? []);
         this.isLoading.set(false);
         // Reconnect WebSocket when user is loaded from stored token
         this.wsNotif.connect(token, () => this.getAccessToken());

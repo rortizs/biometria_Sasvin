@@ -5,7 +5,7 @@ import { provideRouter } from '@angular/router';
 import { AuthService } from './auth.service';
 import { WebSocketNotificationService } from './websocket-notification.service';
 import { environment } from '../../../environments/environment';
-import { User } from '../models/user.model';
+import { AuthMeResponse, User } from '../models/user.model';
 
 // Regression coverage for the canonical uppercase `UserRole` migration
 // (design.md "Canonical Roles", task 4.1) — `isAdmin`/`isCoordinadorOrAbove`
@@ -49,6 +49,17 @@ describe('AuthService', () => {
     return svc;
   }
 
+  /** Same as above but flushes the real `/auth/me` wire shape
+   *  (`AuthMeResponse`, task 4.3a) carrying `permissions`. */
+  function createServiceWithPermissions(permissions: string[]): AuthService {
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'fake-token');
+    const svc = TestBed.inject(AuthService);
+    const req = httpMock.expectOne(`${environment.apiUrl}/auth/me`);
+    const response: AuthMeResponse = { ...buildUser('COORDINADOR'), permissions };
+    req.flush(response);
+    return svc;
+  }
+
   beforeEach(() => {
     wsNotifSpy = jasmine.createSpyObj('WebSocketNotificationService', ['connect', 'disconnect']);
     TestBed.configureTestingModule({
@@ -88,6 +99,29 @@ describe('AuthService', () => {
     it('is false for a role outside the coordinador-or-above set', () => {
       service = createServiceWithRole('CATEDRATICO');
       expect(service.isCoordinadorOrAbove()).toBe(false);
+    });
+  });
+
+  // Task 4.3: `/auth/me` now returns `permissions: string[]` (task 4.3a).
+  // `hasPermission()` is the single source of truth guards/components use
+  // to check a granted permission code, instead of hardcoding a
+  // role→permission map that would drift from the admin-configurable
+  // Roles UI.
+  describe('hasPermission', () => {
+    it('is true for a permission code present in /auth/me\'s granted list', () => {
+      service = createServiceWithPermissions(['user_scopes.manage', 'attendance.view']);
+      expect(service.hasPermission('user_scopes.manage')).toBe(true);
+    });
+
+    it('is false for a permission code absent from the granted list (proves it is a real lookup, not a stub)', () => {
+      service = createServiceWithPermissions(['attendance.view']);
+      expect(service.hasPermission('user_scopes.manage')).toBe(false);
+    });
+
+    it('is false for every code before /auth/me resolves (no token)', () => {
+      // No token set -> loadCurrentUser() short-circuits, permissions stays empty.
+      service = TestBed.inject(AuthService);
+      expect(service.hasPermission('user_scopes.manage')).toBe(false);
     });
   });
 });
