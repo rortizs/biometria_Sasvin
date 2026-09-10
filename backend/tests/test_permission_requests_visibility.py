@@ -200,6 +200,92 @@ async def test_assigned_secretaria_views_request():
 
 
 @pytest.mark.asyncio
+async def test_scoped_coordinador_denied_cross_facultad_view():
+    """Task 3.15 (cross-scope denial): a `COORDINADOR` with a real
+    `user_scope_assignments` row for one facultad MUST be denied detail
+    visibility on a request whose employee belongs to a *different*
+    facultad -- not merely an unscoped/unrelated actor. Exercises the
+    same `assert_request_scope` cross-scope-mismatch path already proven
+    at the stage-1 approval layer (`test_out_of_scope_coordinador_denied`
+    in `test_permission_requests_two_stage.py`), but at the read/visibility
+    layer, which had no dedicated cross-scope-mismatch test before this
+    task -- only an unrelated-actor (no scope at all) case.
+    """
+    actor_dept_id = uuid4()
+    request_dept_id = uuid4()  # deliberately different facultad
+    actor = _coordinador()
+    employee = _employee(department_id=request_dept_id)
+    request = _permission_request(employee_id=employee.id)
+    db = _mock_db(
+        _db_result(scalar=request),  # _get_request_or_404
+        _db_result(scalar=employee),  # _get_request_employee
+        _db_result(
+            scalars_list=[_scope_assignment(user=actor, department_id=actor_dept_id)]
+        ),  # resolve_user_scopes(actor) -- scoped, but to a different facultad
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await pr_endpoint.get_permission_request(db, actor, request.id)
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_scoped_director_denied_cross_facultad_view():
+    """Same cross-scope-mismatch proof as above, for the read-only
+    `DIRECTOR` visibility path (spec "DIRECTOR accesses assigned academic
+    management read-only" + "Cross-scope denial tests cover organizational
+    boundaries").
+    """
+    actor_dept_id = uuid4()
+    request_dept_id = uuid4()
+    actor = _director()
+    employee = _employee(department_id=request_dept_id)
+    request = _permission_request(employee_id=employee.id)
+    db = _mock_db(
+        _db_result(scalar=request),
+        _db_result(scalar=employee),
+        _db_result(
+            scalars_list=[_scope_assignment(user=actor, department_id=actor_dept_id)]
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await pr_endpoint.get_permission_request(db, actor, request.id)
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_assigned_secretaria_denied_wrong_director_view():
+    """Task 3.15 (cross-scope denial): a `SECRETARIA` assigned to
+    director X MUST be denied detail visibility on a request whose
+    resolved scope director is Y -- not merely an unassigned secretaría
+    (no director link at all). Read-layer counterpart of
+    `test_unassigned_secretaria_denied` in
+    `test_permission_requests_two_stage.py`, which only proves this at
+    the stage-2 approval transition.
+    """
+    director_x = _director()
+    director_y = _director()
+    actor = _secretaria()
+    employee = _employee(department_id=uuid4())
+    request = _permission_request(employee_id=employee.id)
+    db = _mock_db(
+        _db_result(scalar=request),
+        _db_result(scalar=employee),  # _get_request_employee
+        _db_result(
+            scalars_list=[_scope_assignment(user=director_y, department_id=employee.department_id)]
+        ),  # _resolve_scope_director_ids -- request's real scope director is Y
+        _db_result(
+            scalars_list=[_scope_assignment(user=actor, director_user_id=director_x.id)]
+        ),  # resolve_user_scopes(actor) -- actor is assigned to director X, not Y
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await pr_endpoint.get_permission_request(db, actor, request.id)
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_unrelated_actor_cannot_view_request():
     actor = _catedratico()
     employee = _employee(department_id=uuid4())
