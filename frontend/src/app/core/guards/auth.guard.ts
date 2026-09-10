@@ -5,11 +5,14 @@ import { filter, map, take } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
 // Canonical uppercase roles (user.model.ts's `UserRole`, design.md "Canonical
-// Roles"). Casing fixed 1:1 with the pre-migration literals — same 4-role
-// set, no new role added or removed. Extending this to DEV/DECANO/DUEÑO or
-// narrowing it (e.g. DIRECTOR is now read-only per D10) is a real dashboard
-// access-boundary decision reserved for task 4.7, not decided here.
-const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINADOR', 'SECRETARIA'] as const;
+// Roles"). `DECANO`/`DUEÑO` added by task 4.7 — design.md's Corrected Role
+// Matrix gives them read-only Dashboard + reporting access, and they were
+// previously locked out of every `/admin/*` route entirely (redirected to
+// `/requests`), making the dashboard's DECANO/DUEÑO widget-hiding work
+// unreachable. Narrowing DIRECTOR/COORDINADOR further (D10: DIRECTOR is now
+// read-only) is a separate, not-yet-decided access-boundary change, left
+// untouched here — see apply-progress.md task 4.7 evidence.
+const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINADOR', 'SECRETARIA', 'DECANO', 'DUEÑO'] as const;
 
 function hasAdminRole(role: string): boolean {
   return (ADMIN_ROLES as readonly string[]).includes(role);

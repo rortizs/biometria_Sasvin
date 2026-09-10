@@ -1,9 +1,10 @@
-import { Component, OnInit, ViewChild, ElementRef, inject, signal } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import { forkJoin } from 'rxjs';
+import { AuthService } from '../../../../core/services/auth.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { PositionService } from '../../../../core/services/position.service';
 import { DepartmentService } from '../../../../core/services/department.service';
@@ -28,9 +29,11 @@ import { Location } from '../../../../core/models/location.model';
         </div>
         <div class="header-right">
           <app-notification-bell />
-          <button class="btn btn-primary" (click)="openCreateModal()">
-            + Nuevo Empleado
-          </button>
+          @if (canManageEmployees()) {
+            <button class="btn btn-primary" (click)="openCreateModal()">
+              + Nuevo Empleado
+            </button>
+          }
         </div>
       </header>
 
@@ -67,13 +70,15 @@ import { Location } from '../../../../core/models/location.model';
                 </td>
                 <td>
                   <div class="actions">
-                    <button
-                      class="btn btn-sm btn-edit"
-                      (click)="editEmployee(employee)"
-                      title="Editar"
-                    >
-                      ✏️
-                    </button>
+                    @if (canManageEmployees()) {
+                      <button
+                        class="btn btn-sm btn-edit"
+                        (click)="editEmployee(employee)"
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                    }
                     <button
                       class="btn btn-sm"
                       (click)="registerFace(employee)"
@@ -130,13 +135,15 @@ import { Location } from '../../../../core/models/location.model';
                 </div>
               </div>
               <div class="mobile-card-actions">
-                <button
-                  class="btn btn-sm btn-edit"
-                  (click)="editEmployee(employee)"
-                  title="Editar"
-                >
-                  ✏️ Editar
-                </button>
+                @if (canManageEmployees()) {
+                  <button
+                    class="btn btn-sm btn-edit"
+                    (click)="editEmployee(employee)"
+                    title="Editar"
+                  >
+                    ✏️ Editar
+                  </button>
+                }
                 <button
                   class="btn btn-sm"
                   (click)="registerFace(employee)"
@@ -195,10 +202,10 @@ import { Location } from '../../../../core/models/location.model';
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Puesto</label>
+                  <label>Puesto (catedrático)</label>
                   <select [(ngModel)]="newEmployee.position_id" name="position">
                     <option [ngValue]="null">-- Seleccionar --</option>
-                    @for (pos of positions(); track pos.id) {
+                    @for (pos of catedraticoPositions(); track pos.id) {
                       <option [ngValue]="pos.id">{{ pos.name }}</option>
                     }
                   </select>
@@ -924,6 +931,7 @@ import { Location } from '../../../../core/models/location.model';
   `],
 })
 export class EmployeesComponent implements OnInit {
+  private readonly authService = inject(AuthService);
   private readonly employeeService = inject(EmployeeService);
   private readonly positionService = inject(PositionService);
   private readonly departmentService = inject(DepartmentService);
@@ -937,6 +945,27 @@ export class EmployeesComponent implements OnInit {
   readonly locations = signal<Location[]>([]);
   readonly showModal = signal(false);
   readonly showFaceModal = signal(false);
+
+  /** Spec "SECRETARIA creates/edits catedrático employees only" /
+   * "SECRETARIA cannot manage non-teaching employees" (design D6). Gates
+   * the create/edit actions entirely: the backend's only permission for
+   * `POST /employees/` and `PATCH /employees/{id}` is
+   * `employees.manage.catedratico` (there is no broader
+   * "employees.manage" grant), so an actor without it would only ever see
+   * a 403 on submit -- hide the actions instead of showing a dead-end
+   * form (task 4.7). */
+  readonly canManageEmployees = computed(() => this.authService.hasPermission('employees.manage.catedratico'));
+
+  /** Mirrors the backend's `require_teacher_position` gate
+   * (`employees.py`'s `_require_teacher_target_position`, task 3.9): that
+   * gate unconditionally rejects any create/update whose target
+   * `position_id` doesn't map to `canonical_role === 'CATEDRATICO'` for
+   * every actor able to reach this endpoint at all, so the create/edit
+   * form's position picker only ever offers catedrático positions —
+   * selecting anything else would always 403 on submit (task 4.7). */
+  readonly catedraticoPositions = computed(() =>
+    this.positions().filter((position) => position.canonical_role === 'CATEDRATICO')
+  );
 
   // Face registration — liveness flow
   readonly faceStep = signal(0);

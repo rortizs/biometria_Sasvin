@@ -68,6 +68,24 @@ describe('auth.guard', () => {
       expect(result).toBe(false);
       expect(navigateSpy).toHaveBeenCalledWith(['/requests']);
     });
+
+    // Task 4.7: design.md's Corrected Role Matrix gives DECANO/DUEÑO
+    // read-only Dashboard access — they were missing from ADMIN_ROLES
+    // (flagged as "a real dashboard access-boundary decision reserved for
+    // task 4.7" by task 4.3's own comment), which made `/admin/dashboard`
+    // unreachable for them and the widget-hiding work on that route dead
+    // code from the router's perspective.
+    it('allows DECANO through to /admin/dashboard', () => {
+      setupWithUser(buildUser('DECANO'));
+      const result = TestBed.runInInjectionContext(() => adminGuard({} as never, {} as never));
+      expect(result).toBe(true);
+    });
+
+    it('allows DUEÑO through to /admin/dashboard', () => {
+      setupWithUser(buildUser('DUEÑO'));
+      const result = TestBed.runInInjectionContext(() => adminGuard({} as never, {} as never));
+      expect(result).toBe(true);
+    });
   });
 
   describe('guestGuard', () => {
