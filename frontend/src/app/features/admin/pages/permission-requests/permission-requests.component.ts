@@ -586,12 +586,18 @@ export class AdminPermissionRequestsComponent implements OnInit {
   }
 
   canApprove(req: PermissionRequest): boolean {
+    // Casing-only fix for the canonical uppercase UserRole type (task 4.1).
+    // The underlying role-gating logic below is UNCHANGED and is already
+    // stale against design.md's two-stage state machine (stage 2 is
+    // SECRETARIA-of-scope-DIRECTOR with mandatory justification, not
+    // DIRECTOR itself — DIRECTOR is read-only per D7/D10). Rewriting this to
+    // the real stage-aware behavior is task 4.4's scope, not this call's.
     const role = this.authService.user()?.role;
     if (!role) return false;
     // pending -> coordinator or admin can approve
-    if (req.status === 'pending' && (role === 'admin' || role === 'coordinador')) return true;
+    if (req.status === 'pending' && (role === 'ADMIN' || role === 'COORDINADOR')) return true;
     // coordinator_approved -> director or admin can do final approval
-    if (req.status === 'coordinator_approved' && (role === 'admin' || role === 'director')) return true;
+    if (req.status === 'coordinator_approved' && (role === 'ADMIN' || role === 'DIRECTOR')) return true;
     return false;
   }
 

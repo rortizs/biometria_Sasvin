@@ -4,7 +4,12 @@ import { toObservable } from '@angular/core/rxjs-interop';
 import { filter, map, take } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
-const ADMIN_ROLES = ['admin', 'director', 'coordinador', 'secretaria'] as const;
+// Canonical uppercase roles (user.model.ts's `UserRole`, design.md "Canonical
+// Roles"). Casing fixed 1:1 with the pre-migration literals — same 4-role
+// set, no new role added or removed. Extending this to DEV/DECANO/DUEÑO or
+// narrowing it (e.g. DIRECTOR is now read-only per D10) is a real dashboard
+// access-boundary decision reserved for task 4.7, not decided here.
+const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'COORDINADOR', 'SECRETARIA'] as const;
 
 function hasAdminRole(role: string): boolean {
   return (ADMIN_ROLES as readonly string[]).includes(role);

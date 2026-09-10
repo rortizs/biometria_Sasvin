@@ -24,8 +24,15 @@ export class AuthService {
   readonly user = this.currentUser.asReadonly();
   readonly loading = this.isLoading.asReadonly();
   readonly isAuthenticated = computed(() => !!this.currentUser());
-  readonly isAdmin = computed(() => this.currentUser()?.role === 'admin');
-  readonly isCoordinadorOrAbove = computed(() => ['admin', 'director', 'coordinador'].includes(this.currentUser()?.role ?? ''));
+  // Canonical uppercase roles (user.model.ts's `UserRole`, design.md "Canonical
+  // Roles"). Casing fixed 1:1 with the pre-migration literals below — no
+  // change to which roles are included. `isCoordinadorOrAbove` is currently
+  // unused anywhere in the codebase (confirmed by grep); its inclusion of
+  // `DIRECTOR` predates design.md's D10 (`DIRECTOR` is now read-only), so a
+  // future caller should re-evaluate whether `DIRECTOR` still belongs here
+  // rather than assume this call's casing-only fix re-validated the set.
+  readonly isAdmin = computed(() => this.currentUser()?.role === 'ADMIN');
+  readonly isCoordinadorOrAbove = computed(() => ['ADMIN', 'DIRECTOR', 'COORDINADOR'].includes(this.currentUser()?.role ?? ''));
   readonly mustChangePassword = computed(() => this.currentUser()?.must_change_password ?? false);
 
   constructor() {

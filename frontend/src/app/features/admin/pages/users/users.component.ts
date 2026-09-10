@@ -238,7 +238,7 @@ type ModalType = 'create' | 'edit' | 'password' | 'rbac' | null;
             <h2>Roles RBAC</h2>
             <p class="modal-subtitle">Usuario: <strong>{{ selectedUser()?.email }}</strong></p>
 
-            @if (['secretaria', 'catedratico'].includes(selectedUser()?.role ?? '')) {
+            @if (['SECRETARIA', 'CATEDRATICO'].includes(selectedUser()?.role ?? '')) {
               <div class="info-msg">
                 Los usuarios con rol <strong>{{ roleName(selectedUser()!.role) }}</strong> solo pueden tener 1 rol RBAC asignado.
               </div>
@@ -398,26 +398,32 @@ export class UsersComponent implements OnInit {
 
   readonly currentUserId = computed(() => this.authService.user()?.id ?? null);
 
+  // Casing-only fix for the canonical uppercase UserRole type (task 4.1) —
+  // same 5-role set as before ('admin' kept even though B6 always rejects
+  // ADMIN assignment server-side; that mismatch predates this migration and
+  // is not fixed here). Adding DEV/DECANO/DUEÑO/ESTUDIANTE/PADRES as
+  // assignable options here is a real access-boundary decision reserved for
+  // task 4.7, not decided in this call.
   readonly roleOptions: { value: UserRole; label: string }[] = [
-    { value: 'admin', label: 'Administrador' },
-    { value: 'director', label: 'Director' },
-    { value: 'coordinador', label: 'Coordinador' },
-    { value: 'secretaria', label: 'Secretaria' },
-    { value: 'catedratico', label: 'Catedrático' },
+    { value: 'ADMIN', label: 'Administrador' },
+    { value: 'DIRECTOR', label: 'Director' },
+    { value: 'COORDINADOR', label: 'Coordinador' },
+    { value: 'SECRETARIA', label: 'Secretaria' },
+    { value: 'CATEDRATICO', label: 'Catedrático' },
   ];
 
   createForm: { email: string; password: string; full_name: string; role: UserRole; employee_id: string | null } = {
     email: '',
     password: '',
     full_name: '',
-    role: 'catedratico',
+    role: 'CATEDRATICO',
     employee_id: null,
   };
 
   editForm: { email: string; full_name: string; role: UserRole; is_active: boolean } = {
     email: '',
     full_name: '',
-    role: 'catedratico',
+    role: 'CATEDRATICO',
     is_active: true,
   };
 
@@ -446,7 +452,7 @@ export class UsersComponent implements OnInit {
   // --- Create ---
 
   openCreateModal(): void {
-    this.createForm = { email: '', password: '', full_name: '', role: 'catedratico', employee_id: null };
+    this.createForm = { email: '', password: '', full_name: '', role: 'CATEDRATICO', employee_id: null };
     this.employeeSearch = '';
     this.filteredEmployees.set([]);
     this.formError.set(null);
@@ -655,7 +661,7 @@ export class UsersComponent implements OnInit {
 
   toggleRbacRole(role: Role, checked: boolean): void {
     const user = this.selectedUser();
-    const isRestricted = ['secretaria', 'catedratico'].includes(user?.role ?? '');
+    const isRestricted = ['SECRETARIA', 'CATEDRATICO'].includes(user?.role ?? '');
 
     if (checked && isRestricted) {
       // Only allow 1 role for restricted types
@@ -703,38 +709,57 @@ export class UsersComponent implements OnInit {
 
   // --- Helpers ---
 
+  // Full canonical role set (user.model.ts's `UserRole`, 10 values) — the
+  // users table can list any user regardless of what roleOptions the
+  // create/edit forms offer, so every canonical role needs a display label
+  // here or it would render as a raw uppercase code (the `?? role`
+  // fallback). `ADMINISTRATIVO`/`supervisor` are dropped: neither is a
+  // valid `UserRole` value anymore (deprecated non-assignable / legacy
+  // alias resolved server-side, design.md D1/D2).
   roleName(role: UserRole): string {
     const names: Record<string, string> = {
-      admin: 'Admin',
-      director: 'Director',
-      coordinador: 'Coordinador',
-      secretaria: 'Secretaria',
-      catedratico: 'Catedrático',
-      supervisor: 'Supervisor',
+      ADMIN: 'Admin',
+      DEV: 'Desarrollador',
+      DECANO: 'Decano',
+      DUEÑO: 'Dueño',
+      DIRECTOR: 'Director',
+      COORDINADOR: 'Coordinador',
+      SECRETARIA: 'Secretaria',
+      CATEDRATICO: 'Catedrático',
+      ESTUDIANTE: 'Estudiante',
+      PADRES: 'Padre/Madre',
     };
     return names[role] ?? role;
   }
 
   roleBgColor(role: UserRole): string {
     const map: Record<string, string> = {
-      admin: '#ede9fe',
-      director: '#dbeafe',
-      coordinador: '#ccfbf1',
-      secretaria: '#ffedd5',
-      catedratico: '#f3f4f6',
-      supervisor: '#f3f4f6',
+      ADMIN: '#ede9fe',
+      DEV: '#e0e7ff',
+      DECANO: '#fce7f3',
+      DUEÑO: '#fee2e2',
+      DIRECTOR: '#dbeafe',
+      COORDINADOR: '#ccfbf1',
+      SECRETARIA: '#ffedd5',
+      CATEDRATICO: '#f3f4f6',
+      ESTUDIANTE: '#ecfccb',
+      PADRES: '#fef9c3',
     };
     return map[role] ?? '#f3f4f6';
   }
 
   roleTextColor(role: UserRole): string {
     const map: Record<string, string> = {
-      admin: '#7c3aed',
-      director: '#2563eb',
-      coordinador: '#0d9488',
-      secretaria: '#ea580c',
-      catedratico: '#4b5563',
-      supervisor: '#4b5563',
+      ADMIN: '#7c3aed',
+      DEV: '#4338ca',
+      DECANO: '#be185d',
+      DUEÑO: '#991b1b',
+      DIRECTOR: '#2563eb',
+      COORDINADOR: '#0d9488',
+      SECRETARIA: '#ea580c',
+      CATEDRATICO: '#4b5563',
+      ESTUDIANTE: '#4d7c0f',
+      PADRES: '#a16207',
     };
     return map[role] ?? '#4b5563';
   }
