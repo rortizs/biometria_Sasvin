@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { NotificationBellComponent } from '../../../../core/components/notification-bell/notification-bell.component';
 import { forkJoin } from 'rxjs';
 import { AttendanceService } from '../../../../core/services/attendance.service';
+import { AuthService } from '../../../../core/services/auth.service';
 import { EmployeeService } from '../../../../core/services/employee.service';
 import { DepartmentService } from '../../../../core/services/department.service';
 import { AttendanceRecord, AttendanceStatus } from '../../../../core/models/attendance.model';
@@ -45,10 +46,12 @@ interface AttendanceSummary {
         </div>
         <div class="header-actions" style="display:flex;align-items:center;gap:0.75rem;">
           <app-notification-bell />
-          <button class="export-btn" (click)="exportToCSV()" [disabled]="loading() || filteredAttendance().length === 0">
-          <span class="export-icon">&#8681;</span>
-          Exportar CSV
-        </button>
+          @if (canExport()) {
+            <button class="export-btn" (click)="exportToCSV()" [disabled]="loading() || filteredAttendance().length === 0">
+              <span class="export-icon">&#8681;</span>
+              Exportar CSV
+            </button>
+          }
         </div>
       </header>
 
@@ -207,7 +210,7 @@ interface AttendanceSummary {
                     <td class="employee-cell">
                       <span class="employee-name">{{ record.employee_name }}</span>
                     </td>
-                    <td>{{ record.record_date | date: 'dd/MM/yyyy' }}</td>
+                    <td>{{ formatRecordDate(record.record_date) }}</td>
                     <td>
                       @if (record.check_in) {
                         <span class="time-badge check-in">{{ record.check_in | date: 'HH:mm' }}</span>
@@ -278,7 +281,7 @@ interface AttendanceSummary {
                   <div class="mobile-card-body">
                     <div class="mobile-field">
                       <span class="mobile-label">Fecha</span>
-                      <span class="mobile-value">{{ record.record_date | date: 'dd/MM/yyyy' }}</span>
+                      <span class="mobile-value">{{ formatRecordDate(record.record_date) }}</span>
                     </div>
                     <div class="mobile-field">
                       <span class="mobile-label">Entrada</span>
@@ -953,8 +956,23 @@ interface AttendanceSummary {
 })
 export class AttendanceComponent implements OnInit {
   private readonly attendanceService = inject(AttendanceService);
+  private readonly authService = inject(AuthService);
   private readonly employeeService = inject(EmployeeService);
   private readonly departmentService = inject(DepartmentService);
+
+  /**
+   * Gates the CSV export button on the real backend permission code
+   * (`attendance.export`, seeded by `9f8e7d6c5b4a`). Migration
+   * `202606181200` deliberately does NOT grant `attendance.export` to any
+   * of `DECANO`/`DUEÑO`/`DIRECTOR`/`COORDINADOR` (spec: "Administrative
+   * Attendance Access" — "the backend MUST deny any create, update,
+   * delete, or export action on that report", uniformly, no exception for
+   * any of the four read-only roles). `attendance.py` has no export route
+   * at all, so this is a UI-visibility match for a 403 that would
+   * otherwise be structural, not a functional gate on its own — the
+   * backend stays authoritative (spec: "Attendance Backend Enforcement").
+   */
+  readonly canExport = computed(() => this.authService.hasPermission('attendance.export'));
 
   // Signals for state management
   readonly attendance = signal<AttendanceRecord[]>([]);
@@ -986,7 +1004,7 @@ export class AttendanceComponent implements OnInit {
     const deptId = this.filters.departmentId;
 
     if (!deptId) {
-      return records;
+      return this.sortAttendanceRecords(records);
     }
 
     // Get employee IDs for selected department
@@ -996,7 +1014,9 @@ export class AttendanceComponent implements OnInit {
         .map(emp => emp.id)
     );
 
-    return records.filter(record => deptEmployeeIds.has(record.employee_id));
+    return this.sortAttendanceRecords(
+      records.filter(record => deptEmployeeIds.has(record.employee_id))
+    );
   });
 
   // Computed: summary statistics
@@ -1146,6 +1166,16 @@ export class AttendanceComponent implements OnInit {
     return `In ${checkIn} / Out ${checkOut}`;
   }
 
+  formatRecordDate(dateStr: string): string {
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (dateOnly) {
+      const [, year, month, day] = dateOnly;
+      return `${day}/${month}/${year}`;
+    }
+
+    return this.formatDateTime(dateStr);
+  }
+
   exportToCSV(): void {
     const records = this.filteredAttendance();
     if (records.length === 0) return;
@@ -1169,7 +1199,7 @@ export class AttendanceComponent implements OnInit {
     // CSV rows
     const rows = records.map(record => [
       record.employee_name,
-      this.formatDate(record.record_date),
+      this.formatRecordDate(record.record_date),
       record.check_in ? this.formatTime(record.check_in) : '-',
       record.check_out ? this.formatTime(record.check_out) : '-',
       this.calculateHoursWorked(record),
@@ -1204,7 +1234,29 @@ export class AttendanceComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 
-  private formatDate(dateStr: string): string {
+  private sortAttendanceRecords(records: AttendanceRecord[]): AttendanceRecord[] {
+    return [...records].sort((a, b) => {
+      const dateComparison = a.record_date.localeCompare(b.record_date);
+      if (dateComparison !== 0) return dateComparison;
+
+      const employeeComparison = a.employee_name.localeCompare(b.employee_name, 'es');
+      if (employeeComparison !== 0) return employeeComparison;
+
+      const checkInComparison = this.compareOptionalValues(a.check_in, b.check_in);
+      if (checkInComparison !== 0) return checkInComparison;
+
+      return a.id.localeCompare(b.id);
+    });
+  }
+
+  private compareOptionalValues(a: string | null, b: string | null): number {
+    if (a === b) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return a.localeCompare(b);
+  }
+
+  private formatDateTime(dateStr: string): string {
     const date = new Date(dateStr);
     return date.toLocaleDateString('es-AR', {
       day: '2-digit',
