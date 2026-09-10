@@ -26,7 +26,9 @@ type ModalType = 'create' | 'edit' | 'password' | 'rbac' | null;
         </div>
         <div class="header-right">
           <app-notification-bell />
-          <button class="btn btn-primary" (click)="openCreateModal()">+ Nuevo Usuario</button>
+          @if (canManageUsers()) {
+            <button class="btn btn-primary" (click)="openCreateModal()">+ Nuevo Usuario</button>
+          }
         </div>
       </header>
 
@@ -66,10 +68,12 @@ type ModalType = 'create' | 'edit' | 'password' | 'rbac' | null;
                   </td>
                   <td>
                     <div class="actions">
-                      <button class="btn btn-sm btn-edit" (click)="openEditModal(user)">Editar</button>
-                      <button class="btn btn-sm btn-perms" (click)="openPasswordModal(user)">Contraseña</button>
+                      @if (canManageUsers()) {
+                        <button class="btn btn-sm btn-edit" (click)="openEditModal(user)">Editar</button>
+                        <button class="btn btn-sm btn-perms" (click)="openPasswordModal(user)">Contraseña</button>
+                      }
                       <button class="btn btn-sm btn-rbac" (click)="openRbacModal(user)">Roles RBAC</button>
-                      @if (user.id !== currentUserId()) {
+                      @if (canManageUsers() && user.id !== currentUserId()) {
                         <button class="btn btn-sm btn-danger" (click)="deleteUser(user)">Eliminar</button>
                       }
                     </div>
@@ -397,6 +401,17 @@ export class UsersComponent implements OnInit {
   readonly showPassword = signal(false);
 
   readonly currentUserId = computed(() => this.authService.user()?.id ?? null);
+
+  /** Security fix (mirrors the backend `require_permission("users.manage")`
+   * gate now protecting `POST /auth/register`, `PATCH/DELETE /users/{id}`,
+   * and `POST /users/{id}/change-password` — see `auth.py`/`users.py`).
+   * Gates create/edit/password/delete UI so an actor who reaches this page
+   * (e.g. DECANO/DUEÑO via `adminGuard`'s `ADMIN_ROLES`) without the
+   * `users.manage` grant never sees actions that would just 403 on submit.
+   * "Roles RBAC" is intentionally excluded — that action hits a
+   * DEV/bootstrap-admin-only backend dependency
+   * (`get_current_technical_rbac_admin`), not `users.manage`. */
+  readonly canManageUsers = computed(() => this.authService.hasPermission('users.manage'));
 
   // Casing-only fix for the canonical uppercase UserRole type (task 4.1) —
   // same 5-role set as before ('admin' kept even though B6 always rejects

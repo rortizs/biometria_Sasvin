@@ -9,8 +9,8 @@ from app.api.deps import (
     ensure_can_assign_role,
     get_db,
     get_current_user,
-    get_current_active_admin,
     permission_codes_for_user,
+    require_permission,
     settings,
 )
 from app.core.security import (
@@ -93,12 +93,12 @@ async def login(
 )
 async def register(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_admin: Annotated[User, Depends(get_current_active_admin)],
+    current_admin: Annotated[User, Depends(require_permission("users.manage"))],
     user_in: UserCreate,
     configured_settings=settings,
 ) -> User:
     """
-    Registrar un nuevo usuario del sistema. Requiere rol admin.
+    Registrar un nuevo usuario del sistema. Requiere el permiso `users.manage`.
 
     Este endpoint crea usuarios con acceso al panel de administración.
     No confundir con el registro de empleados (`POST /employees/`) —
@@ -107,6 +107,16 @@ async def register(
 
     El email debe ser único y pertenecer al dominio @miumg.edu.gt.
     La contraseña se hashea con bcrypt antes de guardarse.
+
+    NOTA de seguridad (fix RBAC): este endpoint antes usaba el gate
+    genérico `get_current_active_admin` (allowlist `{ADMIN, DEV, DECANO,
+    DUEÑO}`), lo que permitía a DECANO/DUEÑO crear usuarios arbitrarios pese
+    a que la spec "Business Top Role Boundaries" los declara de solo
+    lectura. Ahora usa `require_permission("users.manage")`, el mismo
+    permiso que ya protege `PATCH/DELETE /users/{id}` — solo lo tienen
+    `ADMIN`/`DEV` (y el bootstrap admin). `ensure_can_assign_role()` sigue
+    aplicando debajo para impedir que se asigne `ADMIN`/`DEV`/
+    `ADMINISTRATIVO` incluso a un actor con `users.manage`.
     """
     if user_in.email.casefold() == configured_settings.bootstrap_admin_email.casefold():
         raise HTTPException(
