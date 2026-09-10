@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, adminGuard, guestGuard } from './core/guards/auth.guard';
+import { authGuard, adminGuard, guestGuard, permissionGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -119,6 +119,18 @@ export const routes: Routes = [
         path: 'users',
         loadComponent: () =>
           import('./features/admin/pages/users/users.component').then((m) => m.UsersComponent),
+      },
+      {
+        // task 4.6, design.md D4: scope-admin surface, backed by task 3.8's
+        // `user_scopes.manage`-gated `/user-scopes` endpoint. `permissionGuard`
+        // (task 4.3) was built for exactly this — no prior route used it.
+        path: 'user-scopes',
+        canActivate: [permissionGuard],
+        data: { permission: 'user_scopes.manage' },
+        loadComponent: () =>
+          import('./features/admin/pages/user-scopes/user-scopes.component').then(
+            (m) => m.UserScopesComponent
+          ),
       },
     ],
   },

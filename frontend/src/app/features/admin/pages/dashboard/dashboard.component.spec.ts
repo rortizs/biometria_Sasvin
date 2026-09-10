@@ -14,9 +14,10 @@ describe('DashboardComponent', () => {
   let component: DashboardComponent;
 
   beforeEach(async () => {
-    const authServiceSpy = jasmine.createSpyObj('AuthService', ['logout'], {
+    const authServiceSpy = jasmine.createSpyObj('AuthService', ['logout', 'hasPermission'], {
       user: signal({ full_name: 'Admin UMG', email: 'admin@example.com' }),
     });
+    authServiceSpy.hasPermission.and.returnValue(false);
 
     const attendanceServiceSpy = jasmine.createSpyObj('AttendanceService', ['getTodayAttendance']);
     attendanceServiceSpy.getTodayAttendance.and.returnValue(of([
@@ -76,5 +77,21 @@ describe('DashboardComponent', () => {
     expect(text).toContain('14.2971');
     expect(text).toContain('-89.8956');
     expect(text).toContain('8.4m');
+  });
+
+  // task 4.6: the scope-admin nav card is gated on the same permission
+  // code (`user_scopes.manage`) that guards the `/admin/user-scopes` route
+  // (task 4.6's `permissionGuard` wiring in app.routes.ts) — it must not
+  // appear for actors who would just get redirected away.
+  it('hides the Alcances nav card when the actor lacks user_scopes.manage', () => {
+    (fixture.componentInstance.authService.hasPermission as jasmine.Spy).and.returnValue(false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[routerLink="/admin/user-scopes"]')).toBeFalsy();
+  });
+
+  it('shows the Alcances nav card when the actor holds user_scopes.manage', () => {
+    (fixture.componentInstance.authService.hasPermission as jasmine.Spy).and.returnValue(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[routerLink="/admin/user-scopes"]')).toBeTruthy();
   });
 });

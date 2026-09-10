@@ -104,6 +104,13 @@ import { NotificationBellComponent } from '../../../../core/components/notificat
           <h3>Configuración</h3>
           <p>Ajustes de la institución</p>
         </a>
+        @if (authService.hasPermission('user_scopes.manage')) {
+          <a routerLink="/admin/user-scopes" class="nav-card">
+            <div class="nav-icon">🗺️</div>
+            <h3>Alcances</h3>
+            <p>Asignar coordinadores, directores y secretarías a su alcance</p>
+          </a>
+        }
       </nav>
 
       <!-- Today's attendance -->
