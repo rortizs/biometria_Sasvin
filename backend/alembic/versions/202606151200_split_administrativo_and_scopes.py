@@ -344,7 +344,7 @@ def downgrade() -> None:
             "UPDATE users SET role = CASE "
             "WHEN role::text = 'COORDINADOR' THEN 'ADMINISTRATIVO'::userrole "
             "WHEN role::text = 'SECRETARIA' THEN 'ADMINISTRATIVO'::userrole "
-            "ELSE role::text END::userrole"
+            "ELSE role END"
         )
     )
 

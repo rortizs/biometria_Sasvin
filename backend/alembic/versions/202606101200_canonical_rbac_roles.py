@@ -99,7 +99,7 @@ def upgrade() -> None:
             "WHEN role::text = 'director' THEN 'DIRECTOR'::userrole "
             "WHEN role::text IN ('coordinador','secretaria','supervisor') THEN 'ADMINISTRATIVO'::userrole "
             "WHEN role::text = 'catedratico' THEN 'CATEDRATICO'::userrole "
-            "ELSE role::text END::userrole"
+            "ELSE role END"
         ),
         {
             "bootstrap_email": os.getenv("BOOTSTRAP_ADMIN_EMAIL", "admin@sistemaslab.dev"),
@@ -147,7 +147,7 @@ def downgrade() -> None:
             "WHEN role::text = 'DIRECTOR' THEN 'director'::userrole "
             "WHEN role::text = 'ADMINISTRATIVO' THEN 'coordinador'::userrole "
             "WHEN role::text = 'CATEDRATICO' THEN 'catedratico'::userrole "
-            "ELSE role::text END::userrole"
+            "ELSE role END"
         )
     )
     bind.execute(
