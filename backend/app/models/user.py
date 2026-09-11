@@ -10,11 +10,79 @@ from app.db.base import Base
 
 
 class UserRole(str, enum.Enum):
-    admin = "admin"
-    director = "director"
-    coordinador = "coordinador"
-    secretaria = "secretaria"
-    catedratico = "catedratico"
+    ADMIN = "ADMIN"
+    DEV = "DEV"
+    DECANO = "DECANO"
+    DUEÑO = "DUEÑO"
+    DIRECTOR = "DIRECTOR"
+    # Deprecated, non-assignable: PostgreSQL cannot DROP VALUE from an enum
+    # without a type rebuild, and the Alembic downgrade path (B5) maps
+    # COORDINADOR/SECRETARIA back to this value, so it must stay defined.
+    # See design.md D1/D2.
+    ADMINISTRATIVO = "ADMINISTRATIVO"
+    COORDINADOR = "COORDINADOR"
+    SECRETARIA = "SECRETARIA"
+    CATEDRATICO = "CATEDRATICO"
+    ESTUDIANTE = "ESTUDIANTE"
+    PADRES = "PADRES"
+
+    # Legacy attribute aliases used by existing endpoints/schemas.
+    admin = "ADMIN"
+    director = "DIRECTOR"
+    administrativo = "ADMINISTRATIVO"
+    coordinador = "COORDINADOR"
+    secretaria = "SECRETARIA"
+    catedratico = "CATEDRATICO"
+
+
+CANONICAL_ROLE_VALUES = tuple(role.value for role in UserRole)
+
+# Deprecated canonical role values that MUST NOT be assignable to a user
+# through any API, even though they remain valid at the database enum
+# level for backward compatibility (design.md D1).
+DEPRECATED_ROLE_VALUES = frozenset({UserRole.ADMINISTRATIVO.value})
+
+ASSIGNABLE_ROLE_VALUES = tuple(
+    value for value in CANONICAL_ROLE_VALUES if value not in DEPRECATED_ROLE_VALUES
+)
+
+LEGACY_ROLE_MAPPING = {
+    "admin": "ADMIN",
+    "director": "DIRECTOR",
+    "coordinador": "COORDINADOR",
+    "secretaria": "SECRETARIA",
+    "supervisor": "COORDINADOR",
+    "catedratico": "CATEDRATICO",
+}
+
+
+def canonical_role_from_value(
+    value: str | UserRole | None,
+    *,
+    user_email: str | None = None,
+    bootstrap_admin_email: str | None = None,
+    legacy_admin_fallback_role: str = "DECANO",
+) -> UserRole | None:
+    if value is None:
+        return None
+    if isinstance(value, UserRole):
+        return value
+
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+
+    uppercase = normalized.upper()
+    if uppercase in UserRole._value2member_map_:
+        return UserRole(uppercase)
+
+    legacy = normalized.lower()
+    if legacy == "admin" and user_email and bootstrap_admin_email:
+        if user_email.casefold() != bootstrap_admin_email.casefold():
+            return canonical_role_from_value(legacy_admin_fallback_role)
+
+    mapped = LEGACY_ROLE_MAPPING.get(legacy)
+    return UserRole(mapped) if mapped else None
 
 
 class User(Base):
@@ -29,7 +97,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=True)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole), nullable=False, default=UserRole.admin
+        Enum(UserRole), nullable=False, default=UserRole.ADMIN
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

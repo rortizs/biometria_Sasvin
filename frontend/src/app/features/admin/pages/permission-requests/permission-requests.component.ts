@@ -124,12 +124,24 @@ type FilterTab = 'all' | PermissionRequestStatus;
                 para <strong>{{ getExceptionLabel(approveTarget()!.exception_type) }}</strong>.
               </p>
               <div class="form-group">
-                <label>Notas (opcional)</label>
+                <label>
+                  {{ isStage2(approveTarget()!) ? 'Justificación' : 'Notas (opcional)' }}
+                  @if (isStage2(approveTarget()!)) {
+                    <span class="required">*</span>
+                  }
+                </label>
                 <textarea
                   [(ngModel)]="approveNotes"
                   rows="3"
-                  placeholder="Notas adicionales..."
+                  [placeholder]="
+                    isStage2(approveTarget()!)
+                      ? 'Justificación obligatoria para aprobar en esta etapa...'
+                      : 'Notas adicionales...'
+                  "
                 ></textarea>
+                @if (isStage2(approveTarget()!) && !approveNotes.trim()) {
+                  <div class="field-hint">La justificación es obligatoria para aprobar en esta etapa.</div>
+                }
               </div>
               @if (actionError()) {
                 <div class="error-message">{{ actionError() }}</div>
@@ -137,7 +149,11 @@ type FilterTab = 'all' | PermissionRequestStatus;
             </div>
             <div class="modal-actions">
               <button class="btn btn-outline" (click)="closeModals()">Cancelar</button>
-              <button class="btn btn-approve" [disabled]="actionLoading()" (click)="confirmApprove()">
+              <button
+                class="btn btn-approve"
+                [disabled]="actionLoading() || !canSubmitApprove()"
+                (click)="confirmApprove()"
+              >
                 {{ actionLoading() ? 'Procesando...' : 'Confirmar Aprobación' }}
               </button>
             </div>
@@ -173,7 +189,11 @@ type FilterTab = 'all' | PermissionRequestStatus;
             </div>
             <div class="modal-actions">
               <button class="btn btn-outline" (click)="closeModals()">Cancelar</button>
-              <button class="btn btn-reject" [disabled]="actionLoading()" (click)="confirmReject()">
+              <button
+                class="btn btn-reject"
+                [disabled]="actionLoading() || !canSubmitReject()"
+                (click)="confirmReject()"
+              >
                 {{ actionLoading() ? 'Procesando...' : 'Confirmar Rechazo' }}
               </button>
             </div>
@@ -469,6 +489,12 @@ type FilterTab = 'all' | PermissionRequestStatus;
 
     .required { color: #ef4444; }
 
+    .field-hint {
+      color: #b45309;
+      font-size: 0.8rem;
+      margin-top: 0.375rem;
+    }
+
     textarea {
       width: 100%;
       padding: 0.625rem 0.75rem;
@@ -585,18 +611,57 @@ export class AdminPermissionRequestsComponent implements OnInit {
     return this.requests().filter((r) => r.status === tab).length;
   }
 
+  /**
+   * Stage-aware gate (task 4.4). Mirrors the real backend enforcement in
+   * `permission_requests.py`'s `approve_permission_request`/
+   * `reject_permission_request` — both call the exact same
+   * `has_permission(actor, "permission_requests.approve.stage1"/".stage2")`
+   * check per stage, never a role-name comparison. `DIRECTOR` never holds
+   * either code (design.md D7 — read-only + notified, migration
+   * `202606201200` only grants stage1 to `COORDINADOR` and stage2 to
+   * `SECRETARIA`), so gating on `hasPermission()` alone already hides every
+   * approve/reject action for `DIRECTOR` without a separate role check —
+   * fixes the prior bug where stage-2 approval was gated on
+   * `role === 'DIRECTOR'` instead of the assigned `SECRETARIA`.
+   */
   canApprove(req: PermissionRequest): boolean {
-    const role = this.authService.user()?.role;
-    if (!role) return false;
-    // pending -> coordinator or admin can approve
-    if (req.status === 'pending' && (role === 'admin' || role === 'coordinador')) return true;
-    // coordinator_approved -> director or admin can do final approval
-    if (req.status === 'coordinator_approved' && (role === 'admin' || role === 'director')) return true;
+    if (req.status === 'pending') {
+      return this.authService.hasPermission('permission_requests.approve.stage1');
+    }
+    if (req.status === 'coordinator_approved') {
+      return this.authService.hasPermission('permission_requests.approve.stage2');
+    }
     return false;
   }
 
+  /** Reject is gated by the same per-stage permission code as approve. */
   canReject(req: PermissionRequest): boolean {
     return this.canApprove(req);
+  }
+
+  /** Stage 2 is `coordinator_approved` → assigned `SECRETARIA` review. */
+  isStage2(req: PermissionRequest): boolean {
+    return req.status === 'coordinator_approved';
+  }
+
+  /**
+   * Client-side mirror of the backend's stage-2 422-on-missing-justification
+   * behavior (`PermissionRequestApprove.notes` is optional at stage 1, but
+   * the endpoint rejects an empty/missing `notes` with HTTP 422 once the
+   * request is `coordinator_approved`).
+   */
+  canSubmitApprove(): boolean {
+    const target = this.approveTarget();
+    if (!target) return false;
+    if (this.isStage2(target)) {
+      return this.approveNotes.trim().length > 0;
+    }
+    return true;
+  }
+
+  /** `rejection_reason` is always required by the backend schema. */
+  canSubmitReject(): boolean {
+    return this.rejectReason.trim().length > 0;
   }
 
   openApproveModal(req: PermissionRequest): void {
@@ -620,6 +685,11 @@ export class AdminPermissionRequestsComponent implements OnInit {
   confirmApprove(): void {
     const target = this.approveTarget();
     if (!target) return;
+
+    if (this.isStage2(target) && !this.approveNotes.trim()) {
+      this.actionError.set('La justificación es obligatoria para aprobar en esta etapa.');
+      return;
+    }
 
     this.actionLoading.set(true);
     this.actionError.set(null);

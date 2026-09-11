@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.deps import get_db, get_current_active_admin
+from app.api.deps import get_db, require_permission
 from app.models.biometric_face_session import BiometricFaceSession
 from app.models.employee import Employee
 from app.models.face_embedding import FaceEmbedding
@@ -51,11 +51,11 @@ def _calculate_liveness_delta(metrics: StageMetrics | None) -> Decimal | None:
 )
 async def register_face(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("faces.create"))],
     request: FaceRegisterRequest,
 ) -> dict:
     """
-    Registrar el embedding facial de un empleado. Requiere rol admin.
+    Registrar el embedding facial de un empleado. Requiere permiso `faces.create`.
 
     **Proceso interno:**
     1. Verifica que el empleado exista en la DB
@@ -299,11 +299,11 @@ async def verify_face(
 )
 async def delete_face_embeddings(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("faces.delete"))],
     employee_id: UUID,
 ) -> dict:
     """
-    Eliminar todos los embeddings faciales de un empleado. Requiere rol admin.
+    Eliminar todos los embeddings faciales de un empleado. Requiere permiso `faces.delete`.
 
     Después de eliminar, el campo `has_face_registered` del empleado pasa a `false`
     y no podrá hacer check-in/check-out hasta que se registren nuevos embeddings.

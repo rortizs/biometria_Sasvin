@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_active_admin, get_current_secretaria_or_above
+from app.api.deps import get_db, get_current_user, require_permission
 from app.models.location import Location
 from app.models.user import User
 from app.schemas.location import LocationCreate, LocationUpdate, LocationResponse
@@ -20,11 +20,12 @@ router = APIRouter()
 )
 async def list_locations(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     active_only: bool = True,
 ) -> list[Location]:
-    """Listar sedes de trabajo con sus coordenadas GPS y radio de validación."""
+    """Listar sedes de trabajo con sus coordenadas GPS y radio de validación. Requiere autenticación."""
     query = select(Location)
 
     if active_only:
@@ -46,9 +47,10 @@ async def list_locations(
 )
 async def get_location(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     location_id: UUID,
 ) -> Location:
-    """Obtener una sede por su UUID. Incluye coordenadas y radio de validación GPS."""
+    """Obtener una sede por su UUID. Incluye coordenadas y radio de validación GPS. Requiere autenticación."""
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
 
@@ -72,11 +74,11 @@ async def get_location(
 )
 async def create_location(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("locations.create"))],
     location_in: LocationCreate,
 ) -> Location:
     """
-    Crear una nueva sede de trabajo. Requiere rol secretaria o superior.
+    Crear una nueva sede de trabajo. Requiere el permiso `locations.create`.
 
     El `radius_meters` define el radio en metros alrededor de las coordenadas GPS
     dentro del cual se considera válida la geolocalización de un empleado al hacer
@@ -100,11 +102,11 @@ async def create_location(
 )
 async def update_location(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_secretaria_or_above)],
+    current_user: Annotated[User, Depends(require_permission("locations.update"))],
     location_id: UUID,
     location_in: LocationUpdate,
 ) -> Location:
-    """Actualizar una sede parcialmente. Requiere rol secretaria o superior."""
+    """Actualizar una sede parcialmente. Requiere el permiso `locations.update`."""
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
 
@@ -135,10 +137,10 @@ async def update_location(
 )
 async def delete_location(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_admin)],
+    current_user: Annotated[User, Depends(require_permission("locations.delete"))],
     location_id: UUID,
 ) -> None:
-    """Eliminar una sede. Requiere rol admin."""
+    """Eliminar una sede. Requiere el permiso `locations.delete`."""
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
 

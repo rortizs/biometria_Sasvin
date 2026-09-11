@@ -47,6 +47,24 @@ class UserResponse(UserBase):
         from_attributes = True
 
 
+class AuthMeResponse(UserResponse):
+    """`/auth/me`-only response: adds `permissions` (the current user's
+    deduplicated, sorted permission codes, from
+    `app.api.deps.permission_codes_for_user`) so the frontend can build
+    permission-aware guards/UI instead of role-name string matching.
+
+    Deliberately NOT added to the shared `UserResponse` -- `UserResponse`
+    is also returned by `GET /users/` (list) and `GET /users/{id}`, whose
+    queries do not eager-load `user_roles -> role -> permissions`
+    (confirmed by reading `users.py`); adding a `permissions` field there
+    would either raise on lazy-load in an async context or force an N+1
+    query per listed user. `/auth/me`'s `current_user` always comes through
+    `get_current_user()`, which already eager-loads that relationship.
+    """
+
+    permissions: list[str] = []
+
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str

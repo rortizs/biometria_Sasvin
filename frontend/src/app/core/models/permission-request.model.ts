@@ -13,6 +13,9 @@ export interface PermissionRequest {
   exception_type: string;
   start_date: string;
   end_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  hours_affected: number | null;
   description: string | null;
   status: PermissionRequestStatus;
   coordinator_reviewed_by: string | null;
