@@ -29,6 +29,13 @@ class ExceptionType(str, PyEnum):
     DAY_OFF = "day_off"  # Día libre
     VACATION = "vacation"  # Vacaciones
     SICK_LEAVE = "sick_leave"  # Incapacidad
+    BEREAVEMENT = "bereavement"  # Luto
+    MEDICAL_PERMISSION = "medical_permission"  # Permiso Medico
+    WORK_LETTER = "work_letter"  # Carta de Trabajo
+    COMPENSATORY = "compensatory"  # Compensatorio
+    MATERNITY_LEAVE = "maternity_leave"  # Licencia Maternidad
+    PATERNITY_LEAVE = "paternity_leave"  # Licencia Paternidad
+    PERSONAL_DAY = "personal_day"  # Dia Personal
     HOLIDAY = "holiday"  # Feriado
     PERMISSION = "permission"  # Permiso
     OTHER = "other"  # Otro

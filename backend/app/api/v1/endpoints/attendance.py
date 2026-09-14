@@ -1,9 +1,10 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +18,7 @@ from app.api.deps import (
 from app.models.attendance import AttendanceRecord
 from app.models.employee import Employee
 from app.models.location import Location
+from app.models.schedule import EmployeeSchedule, Schedule
 from app.models.user import User, UserRole
 from app.schemas.attendance import (
     AttendanceCheckIn,
@@ -27,6 +29,8 @@ from app.services.face_recognition import FaceRecognitionService
 from app.services.geolocation import validate_location
 
 router = APIRouter()
+
+GUATEMALA_TZ = ZoneInfo("America/Guatemala")
 
 
 async def _validate_geo(
@@ -122,6 +126,29 @@ def _reject_if_not_live(face_service: FaceRecognitionService, embeddings: list) 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Liveness check failed: static image detected. Please use your real face.",
         )
+
+
+async def _resolve_shift_check_in_time(
+    db: AsyncSession, employee_id, today: date
+) -> Schedule | None:
+    """Resolves the employee's shift from the day-of-week default pattern
+    (EmployeeSchedule -> Schedule) only. Per-date ScheduleAssignment
+    overrides and ScheduleException (vacation/day-off/holiday) records are
+    a deferred, separate refinement -- not considered here."""
+    result = await db.execute(
+        select(Schedule)
+        .join(EmployeeSchedule, EmployeeSchedule.schedule_id == Schedule.id)
+        .where(
+            EmployeeSchedule.employee_id == employee_id,
+            EmployeeSchedule.day_of_week == today.weekday(),
+            EmployeeSchedule.effective_from <= today,
+            or_(
+                EmployeeSchedule.effective_to.is_(None),
+                EmployeeSchedule.effective_to >= today,
+            ),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 @router.post(
@@ -251,9 +278,22 @@ async def check_in(
 
     _reject_if_not_live(face_service, all_embeddings)
 
+    shift = await _resolve_shift_check_in_time(db, employee.id, today)
+
     attendance.check_in = now
     attendance.check_in_confidence = confidence
     attendance.status = "present"
+
+    is_late = False
+    if shift is not None:
+        local_check_in = now.replace(tzinfo=timezone.utc).astimezone(GUATEMALA_TZ)
+        cutoff = (
+            datetime.combine(today, shift.check_in_time, tzinfo=GUATEMALA_TZ)
+            + timedelta(minutes=shift.tolerance_minutes)
+        ).timetz()
+        if local_check_in.timetz() > cutoff:
+            attendance.status = "late"
+            is_late = True
 
     # Store geolocation data
     attendance.check_in_latitude = request.latitude
@@ -271,6 +311,8 @@ async def check_in(
             message += f" (Outside permitted area: {distance:.0f}m)"
         else:
             message += " (No location assigned)"
+    if is_late:
+        message += " (Llegada tardía)"
 
     return AttendanceResponse(
         id=attendance.id,

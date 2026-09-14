@@ -162,7 +162,7 @@ class TestCheckInEndpoint:
 
             # Mock database queries
             mock_db.execute = AsyncMock(
-                side_effect=mock_db_execute_result([None, mock_location])
+                side_effect=mock_db_execute_result([None, mock_location, None])
             )
 
             # Act
