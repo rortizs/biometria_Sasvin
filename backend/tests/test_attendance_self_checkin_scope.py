@@ -199,7 +199,7 @@ async def test_checkin_anonymous_caller_is_unaffected(mock_db, mock_employee, mo
 
     with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
         _mock_face_service(mock_fr, mock_employee)
-        mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None, mock_location]))
+        mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None, mock_location, None]))
 
         response = await check_in(mock_db, request, current_user=None)
 
@@ -213,7 +213,7 @@ async def test_checkin_catedratico_own_employee_is_allowed(mock_db, mock_employe
 
     with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
         _mock_face_service(mock_fr, mock_employee)
-        mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None, mock_location]))
+        mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None, mock_location, None]))
 
         response = await check_in(mock_db, request, current_user=actor)
 
@@ -245,7 +245,7 @@ async def test_checkin_other_authenticated_role_is_unaffected(mock_db, mock_empl
 
     with patch("app.api.v1.endpoints.attendance.FaceRecognitionService") as mock_fr:
         _mock_face_service(mock_fr, mock_employee)
-        mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None, mock_location]))
+        mock_db.execute = AsyncMock(side_effect=mock_db_execute_result([None, mock_location, None]))
 
         response = await check_in(mock_db, request, current_user=actor)
 
