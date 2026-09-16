@@ -5,9 +5,7 @@ import { Observable, tap, catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthMeResponse, User, LoginRequest, TokenResponse } from '../models/user.model';
 import { WebSocketNotificationService } from './websocket-notification.service';
-
-const ACCESS_TOKEN_KEY = 'access_token';
-const REFRESH_TOKEN_KEY = 'refresh_token';
+import { TokenStorageService } from './token-storage.service';
 
 @Injectable({
   providedIn: 'root',
@@ -16,6 +14,7 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly wsNotif = inject(WebSocketNotificationService);
+  private readonly tokenStorage = inject(TokenStorageService);
   private readonly baseUrl = environment.apiUrl;
 
   private readonly currentUser = signal<User | null>(null);
@@ -83,11 +82,11 @@ export class AuthService {
   }
 
   getAccessToken(): string | null {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    return this.tokenStorage.getAccessToken();
   }
 
   getRefreshToken(): string | null {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+    return this.tokenStorage.getRefreshToken();
   }
 
   refreshAccessToken(): Observable<TokenResponse> {
@@ -136,12 +135,10 @@ export class AuthService {
   }
 
   private setTokens(response: TokenResponse): void {
-    localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
-    localStorage.setItem(REFRESH_TOKEN_KEY, response.refresh_token);
+    this.tokenStorage.setTokens(response.access_token, response.refresh_token);
   }
 
   private clearTokens(): void {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    this.tokenStorage.clearTokens();
   }
 }
