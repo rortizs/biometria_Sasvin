@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
 from app.services.websocket_manager import ws_manager
+
+logger = logging.getLogger("app.services.notification")
 
 
 async def notify_user(
@@ -82,4 +85,11 @@ async def _send_email_notification(
             }
         )
     except Exception:
-        pass  # Never block the main flow for email failures
+        # Never block the main flow for email failures, but a silent
+        # `except: pass` here previously hid a real bug (missing Settings
+        # fields raised AttributeError on every attempt) for an unknown
+        # amount of time -- log so a real failure is at least visible.
+        logger.exception(
+            "email_notification_failed",
+            extra={"user_id": str(user_id), "title": title},
+        )
