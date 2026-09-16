@@ -400,6 +400,23 @@ async def test_users_list_hides_bootstrap_admin_from_backoffice():
 
 
 @pytest.mark.asyncio
+async def test_users_list_hides_bootstrap_admin_even_from_itself():
+    # The bootstrap admin can never mutate itself either (see
+    # protect_bootstrap_admin_mutation, always denies regardless of actor),
+    # so there is no capability that justifies exposing it to itself in the
+    # backoffice list -- it must stay hidden from every actor, including
+    # itself, matching the client QA report's "Super Admin NO" expectation.
+    settings = _settings("root@example.com")
+    bootstrap = _user("root@example.com", UserRole.ADMIN)
+    visible = _user("dean@example.com", UserRole.DECANO)
+    db = _mock_db(_db_result(values=[bootstrap, visible]))
+
+    users = await users_endpoint.list_users(db, bootstrap, settings)
+
+    assert users == [visible]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("payload", "unchanged_field", "unchanged_value"),
     [
