@@ -46,14 +46,16 @@ async def list_users(
     return [
         user
         for user in result.scalars().all()
-        if not protect_bootstrap_admin_list_item(user, current_user, configured_settings)
+        if not protect_bootstrap_admin_list_item(user, configured_settings)
     ]
 
 
-def protect_bootstrap_admin_list_item(user: User, actor: User, configured_settings=settings) -> bool:
-    return user.email.casefold() == configured_settings.bootstrap_admin_email.casefold() and (
-        actor.email.casefold() != configured_settings.bootstrap_admin_email.casefold()
-    )
+def protect_bootstrap_admin_list_item(user: User, configured_settings=settings) -> bool:
+    # Hidden from every actor, including itself: protect_bootstrap_admin_mutation
+    # already denies update/delete/change-password on the bootstrap admin
+    # regardless of who the actor is, so there is no capability that would
+    # justify exposing it to itself in this list either.
+    return user.email.casefold() == configured_settings.bootstrap_admin_email.casefold()
 
 
 def _ensure_bootstrap_email_is_not_assigned(email: str | None, configured_settings=settings) -> None:

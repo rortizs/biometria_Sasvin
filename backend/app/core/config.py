@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     # Face Recognition
     face_recognition_threshold: float = 0.6
 
+    # Email notifications (Resend). notification_service._send_email_notification
+    # no-ops when resend_api_key is empty -- set all three via env vars to
+    # enable email delivery.
+    resend_api_key: str = ""
+    email_from_name: str = "Sistema Biométrico UMG"
+    email_from: str = "notificaciones@sistemaslab.dev"
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]
