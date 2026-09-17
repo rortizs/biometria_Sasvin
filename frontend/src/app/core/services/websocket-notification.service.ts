@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Subject, Observable } from 'rxjs';
 import { Notification } from '../models/notification.model';
+import { environment } from '../../../environments/environment';
 
 @Injectable({
   providedIn: 'root',
@@ -37,9 +38,8 @@ export class WebSocketNotificationService {
   }
 
   private openSocket(token: string): void {
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const host = window.location.host;
-    const url = `${protocol}://${host}/api/v1/ws/notifications?token=${token}`;
+    const wsBase = environment.apiUrl.replace(/^http/, 'ws');
+    const url = `${wsBase}/ws/notifications?token=${token}`;
 
     this.socket = new WebSocket(url);
 
