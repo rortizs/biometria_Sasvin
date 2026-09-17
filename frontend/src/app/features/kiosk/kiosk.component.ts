@@ -26,9 +26,14 @@ import type { AttendanceRecord } from '../../core/models/attendance.model';
 
 const KIOSK_LOCATION_KEY = 'kiosk_location_id';
 const KIOSK_RESULT_RESET_DELAY_MS = 12000;
+const ATTENDANCE_ACTION = {
+  CHECK_IN: 'check-in',
+  CHECK_OUT: 'check-out',
+} as const;
 
 type KioskMode = 'idle' | 'scanning' | 'success' | 'error';
 type GeoStatus = 'idle' | 'loading' | 'success' | 'error';
+type AttendanceAction = (typeof ATTENDANCE_ACTION)[keyof typeof ATTENDANCE_ACTION];
 
 interface KioskErrorContent {
   title: string;
@@ -102,13 +107,21 @@ interface KioskErrorContent {
 
         <!-- Result panel -->
         @if (mode() === 'success' && lastRecord()) {
-          <div class="result-panel success">
-            <div class="result-icon">✓</div>
-            <h2>¡Bienvenido!</h2>
+          <div
+            class="result-panel success"
+            [class.check-in]="resultAction() === 'check-in'"
+            [class.check-out]="resultAction() === 'check-out'"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="result-icon" role="img" [attr.aria-label]="resultPresentation().iconLabel">
+              {{ resultPresentation().icon }}
+            </div>
+            <h2>{{ resultPresentation().heading }}</h2>
             <p class="employee-name">{{ lastRecord()?.employee_name }}</p>
             <p class="check-time">
-              {{ isCheckIn() ? 'Entrada' : 'Salida' }}:
-              {{ lastRecord()?.check_in || lastRecord()?.check_out | date: 'HH:mm' }}
+              {{ resultPresentation().timeLabel }}:
+              {{ resultPresentation().time | date: 'HH:mm' }}
             </p>
             <p class="confidence">
               Confianza: {{ (lastRecord()?.confidence ?? 0) * 100 | number: '1.0-0' }}%
@@ -410,9 +423,14 @@ interface KioskErrorContent {
         }
       }
 
-      .result-panel.success {
+      .result-panel.success.check-in {
         background: rgba(34, 197, 94, 0.2);
         border: 2px solid #22c55e;
+      }
+
+      .result-panel.success.check-out {
+        background: rgba(59, 130, 246, 0.2);
+        border: 2px solid #3b82f6;
       }
 
       .result-panel.error {
@@ -913,6 +931,28 @@ export class KioskComponent implements OnInit, OnDestroy {
   readonly mode = signal<KioskMode>('idle');
   readonly isCheckIn = signal(true);
   readonly lastRecord = signal<AttendanceRecord | null>(null);
+  readonly resultAction = signal<AttendanceAction | null>(null);
+  readonly resultPresentation = computed(() => {
+    const record = this.lastRecord();
+
+    if (this.resultAction() === ATTENDANCE_ACTION.CHECK_OUT) {
+      return {
+        heading: 'Salida registrada',
+        icon: '↗',
+        iconLabel: 'Salida registrada correctamente',
+        timeLabel: 'Salida',
+        time: record?.check_out,
+      };
+    }
+
+    return {
+      heading: 'Entrada registrada',
+      icon: '✓',
+      iconLabel: 'Entrada registrada correctamente',
+      timeLabel: 'Entrada',
+      time: record?.check_in,
+    };
+  });
   readonly errorTitle = signal<string>('Intentá nuevamente');
   readonly errorMessage = signal<string>('');
   readonly errorHelp = signal<string>('Acercate al kiosk y repetí el intento cuando estés listo.');
@@ -1092,6 +1132,9 @@ export class KioskComponent implements OnInit, OnDestroy {
   }
 
   async scan(): Promise<void> {
+    const action = this.isCheckIn()
+      ? ATTENDANCE_ACTION.CHECK_IN
+      : ATTENDANCE_ACTION.CHECK_OUT;
     this.prepareForScan();
 
     // Capture frames first (camera doesn't depend on GPS)
@@ -1160,13 +1203,14 @@ export class KioskComponent implements OnInit, OnDestroy {
       longitude: position.longitude,
     };
 
-    const action$ = this.isCheckIn()
+    const action$ = action === ATTENDANCE_ACTION.CHECK_IN
       ? this.attendanceService.checkIn(request)
       : this.attendanceService.checkOut(request);
 
     action$.subscribe({
       next: (record) => {
         this.lastRecord.set(record);
+        this.resultAction.set(action);
         this.mode.set('success');
         this.resetAfterDelay();
       },
@@ -1181,6 +1225,7 @@ export class KioskComponent implements OnInit, OnDestroy {
   private prepareForScan(): void {
     this.clearResultTimeout();
     this.lastRecord.set(null);
+    this.resultAction.set(null);
     this.errorTitle.set('Intentá nuevamente');
     this.errorMessage.set('');
     this.errorHelp.set('Acercate al kiosk y repetí el intento cuando estés listo.');
@@ -1308,6 +1353,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.resultTimeout = setTimeout(() => {
       this.mode.set('idle');
       this.lastRecord.set(null);
+      this.resultAction.set(null);
       this.errorMessage.set('');
     }, KIOSK_RESULT_RESET_DELAY_MS);
   }

@@ -31,7 +31,7 @@ pywebpush>=2.0.0
 # Utils
 python-dotenv>=1.0.0
 tzdata>=2024.1  # zoneinfo needs this on minimal images (python:3.11-slim lacks OS tzdata)
-setuptools>=70.0.0  # Required for face_recognition_models in Python 3.12+
+setuptools>=70.0.0,<81.0.0  # Required for face_recognition_models pkg_resources in Python 3.12+
 
 # Testing
 pytest>=7.4.0
