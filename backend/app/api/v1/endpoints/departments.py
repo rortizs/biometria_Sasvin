@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[DepartmentResponse],
     tags=["departments"],
 )
@@ -64,7 +64,7 @@ async def get_department(
 
 
 @router.post(
-    "/",
+    "",
     response_model=DepartmentResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["departments"],

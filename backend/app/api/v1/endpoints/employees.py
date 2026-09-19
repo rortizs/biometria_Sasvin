@@ -36,7 +36,7 @@ async def _require_teacher_target_position(db: AsyncSession, position_id: UUID |
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[EmployeeResponse],
     tags=["employees"],
     responses={
@@ -146,7 +146,7 @@ async def get_employee(
 
 
 @router.post(
-    "/",
+    "",
     response_model=EmployeeResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["employees"],
