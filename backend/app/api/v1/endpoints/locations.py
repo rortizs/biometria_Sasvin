@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[LocationResponse],
     tags=["locations"],
 )
@@ -64,7 +64,7 @@ async def get_location(
 
 
 @router.post(
-    "/",
+    "",
     response_model=LocationResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["locations"],

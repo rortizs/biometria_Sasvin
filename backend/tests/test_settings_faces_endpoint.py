@@ -61,7 +61,7 @@ def _route_permission_codes(route) -> set[str]:
 
 
 def test_get_settings_now_requires_authentication():
-    route = _route(settings_endpoint.router, "/", "GET")
+    route = _route(settings_endpoint.router, "", "GET")
     assert deps.get_current_user in _dependency_calls(route)
 
 
@@ -81,8 +81,8 @@ def test_verify_face_stays_unauthenticated():
 @pytest.mark.parametrize(
     ("path", "method", "expected_code"),
     [
-        ("/", "PUT", "settings.update"),
-        ("/", "POST", "settings.update"),
+        ("", "PUT", "settings.update"),
+        ("", "POST", "settings.update"),
     ],
 )
 def test_settings_write_endpoints_use_require_permission_not_admin_gate(

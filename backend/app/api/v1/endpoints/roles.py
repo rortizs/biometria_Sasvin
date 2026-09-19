@@ -45,7 +45,7 @@ async def _get_role_or_404(db: AsyncSession, role_id: UUID) -> Role:
 # Role CRUD
 # ---------------------------------------------------------------------------
 
-@router.get("/", response_model=list[RoleResponse])
+@router.get("", response_model=list[RoleResponse])
 async def list_roles(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],
@@ -71,7 +71,7 @@ async def get_role(
     return await _get_role_or_404(db, role_id)
 
 
-@router.post("/", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
 async def create_role(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_technical_rbac_admin)],

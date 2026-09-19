@@ -28,7 +28,7 @@ async def _get_user_or_404(db: AsyncSession, user_id: UUID) -> User:
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[UserResponse],
     tags=["users"],
     responses={

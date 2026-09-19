@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[PositionResponse],
     tags=["positions"],
 )
@@ -64,7 +64,7 @@ async def get_position(
 
 
 @router.post(
-    "/",
+    "",
     response_model=PositionResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["positions"],

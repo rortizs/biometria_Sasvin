@@ -252,7 +252,7 @@ async def _resolve_visible_employee_ids(db: AsyncSession, actor: User) -> set:
 # ---------------------------------------------------------------------------
 
 @router.post(
-    "/",
+    "",
     response_model=PermissionRequestResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["permission-requests"],
@@ -305,7 +305,7 @@ async def create_permission_request(
 # ---------------------------------------------------------------------------
 
 @router.get(
-    "/",
+    "",
     response_model=list[PermissionRequestResponse],
     tags=["permission-requests"],
 )
