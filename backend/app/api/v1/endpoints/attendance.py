@@ -500,7 +500,7 @@ async def check_out(
 
 
 @router.get(
-    "/",
+    "",
     response_model=list[AttendanceResponse],
     tags=["attendance"],
     responses={

@@ -61,7 +61,7 @@ def _route_permission_codes(route) -> set[str]:
 
 
 def test_list_employees_stays_authentication_only():
-    route = _route(employees_endpoint.router, "/", "GET")
+    route = _route(employees_endpoint.router, "", "GET")
     calls = _dependency_calls(route)
     assert deps.get_current_user in calls
     assert deps.get_current_active_admin not in calls
@@ -79,7 +79,7 @@ def test_get_employee_stays_authentication_only():
 # ============ create/update: task 3.9's gate must not regress ============
 
 
-@pytest.mark.parametrize("path, method", [("/", "POST"), ("/{employee_id}", "PATCH")])
+@pytest.mark.parametrize("path, method", [("", "POST"), ("/{employee_id}", "PATCH")])
 def test_create_update_employee_keep_manage_catedratico_gate(path, method):
     route = _route(employees_endpoint.router, path, method)
     calls = _dependency_calls(route)

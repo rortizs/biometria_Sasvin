@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=SettingsResponse,
     tags=["settings"],
 )
@@ -45,7 +45,7 @@ async def get_settings(
 
 
 @router.put(
-    "/",
+    "",
     response_model=SettingsResponse,
     tags=["settings"],
 )
@@ -87,7 +87,7 @@ async def update_settings(
 
 
 @router.post(
-    "/",
+    "",
     response_model=SettingsResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["settings"],
