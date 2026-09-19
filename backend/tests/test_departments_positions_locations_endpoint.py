@@ -66,11 +66,11 @@ def _route_permission_codes(route) -> set[str]:
 @pytest.mark.parametrize(
     ("module", "path", "method"),
     [
-        ("departments", "/", "GET"),
+        ("departments", "", "GET"),
         ("departments", "/{department_id}", "GET"),
-        ("positions", "/", "GET"),
+        ("positions", "", "GET"),
         ("positions", "/{position_id}", "GET"),
-        ("locations", "/", "GET"),
+        ("locations", "", "GET"),
         ("locations", "/{location_id}", "GET"),
     ],
 )
@@ -88,13 +88,13 @@ def test_read_endpoints_now_require_authentication(module, path, method):
 @pytest.mark.parametrize(
     ("module", "path", "method", "expected_code"),
     [
-        ("departments", "/", "POST", "departments.create"),
+        ("departments", "", "POST", "departments.create"),
         ("departments", "/{department_id}", "PATCH", "departments.update"),
         ("departments", "/{department_id}", "DELETE", "departments.delete"),
-        ("positions", "/", "POST", "positions.create"),
+        ("positions", "", "POST", "positions.create"),
         ("positions", "/{position_id}", "PATCH", "positions.update"),
         ("positions", "/{position_id}", "DELETE", "positions.delete"),
-        ("locations", "/", "POST", "locations.create"),
+        ("locations", "", "POST", "locations.create"),
         ("locations", "/{location_id}", "PATCH", "locations.update"),
         ("locations", "/{location_id}", "DELETE", "locations.delete"),
     ],

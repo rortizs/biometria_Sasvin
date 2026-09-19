@@ -938,7 +938,7 @@ async def test_roles_crud_denies_business_top_role_access_to_rbac_internals():
 
 
 def test_users_routes_require_backend_permissions_not_deploy_safe_admin_role_only():
-    assert "users.view" in _route_permission_codes(users_endpoint.router, "/", "GET")
+    assert "users.view" in _route_permission_codes(users_endpoint.router, "", "GET")
     assert "users.manage" in _route_permission_codes(users_endpoint.router, "/{user_id}", "PATCH")
     assert "users.manage" in _route_permission_codes(users_endpoint.router, "/{user_id}", "DELETE")
     assert "users.manage" in _route_permission_codes(

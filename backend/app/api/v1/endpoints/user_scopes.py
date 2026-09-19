@@ -33,7 +33,7 @@ async def _get_assignment_or_404(db: AsyncSession, assignment_id: UUID) -> UserS
     return assignment
 
 
-@router.get("/", response_model=list[UserScopeAssignmentResponse])
+@router.get("", response_model=list[UserScopeAssignmentResponse])
 async def list_user_scope_assignments(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_permission("user_scopes.manage"))],
@@ -46,7 +46,7 @@ async def list_user_scope_assignments(
     return result.scalars().all()
 
 
-@router.post("/", response_model=UserScopeAssignmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserScopeAssignmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_user_scope_assignment(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(require_permission("user_scopes.manage"))],

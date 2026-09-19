@@ -67,7 +67,7 @@ def _route_permission_codes(route) -> set[str]:
 # ==================== Reads: gate replaced with attendance.view ====================
 
 
-@pytest.mark.parametrize("path, method", [("/", "GET"), ("/today", "GET")])
+@pytest.mark.parametrize("path, method", [("", "GET"), ("/today", "GET")])
 def test_list_endpoints_use_attendance_view_permission(path, method):
     route = _route(attendance_endpoint.router, path, method)
     calls = _dependency_calls(route)
