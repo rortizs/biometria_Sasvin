@@ -15,7 +15,15 @@ const REFRESH_TOKEN_KEY = 'refresh_token';
 })
 export class TokenStorageService {
   getAccessToken(): string | null {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    const sessionToken = sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    if (sessionToken) return sessionToken;
+
+    const legacyToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!legacyToken) return null;
+
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, legacyToken);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    return legacyToken;
   }
 
   getRefreshToken(): string | null {
@@ -23,11 +31,13 @@ export class TokenStorageService {
   }
 
   setTokens(accessToken: string, refreshToken: string): void {
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
   }
 
   clearTokens(): void {
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
   }

@@ -12,12 +12,14 @@ import { environment } from '../../../environments/environment';
 describe('WebSocketNotificationService', () => {
   let service: WebSocketNotificationService;
   let capturedUrl: string | undefined;
+  let capturedProtocols: string | string[] | undefined;
   let originalWebSocket: typeof WebSocket;
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(WebSocketNotificationService);
     capturedUrl = undefined;
+    capturedProtocols = undefined;
     originalWebSocket = window.WebSocket;
 
     class FakeWebSocket {
@@ -25,8 +27,9 @@ describe('WebSocketNotificationService', () => {
       onmessage: ((event: MessageEvent) => void) | null = null;
       onclose: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      constructor(url: string) {
+      constructor(url: string, protocols?: string | string[]) {
         capturedUrl = url;
+        capturedProtocols = protocols;
       }
       close(): void {}
       send(): void {}
@@ -42,6 +45,14 @@ describe('WebSocketNotificationService', () => {
   it('derives the WS URL from environment.apiUrl instead of window.location', () => {
     service.connect('fake-token');
 
-    expect(capturedUrl).toBe(`${environment.apiUrl.replace(/^http/, 'ws')}/ws/notifications?token=fake-token`);
+    expect(capturedUrl).toBe(`${environment.apiUrl.replace(/^http/, 'ws')}/ws/notifications`);
+  });
+
+  it('sends the bearer token through WebSocket subprotocols instead of the URL query string', () => {
+    service.connect('fake-token');
+
+    expect(capturedUrl).not.toContain('fake-token');
+    expect(capturedUrl).not.toContain('token=');
+    expect(capturedProtocols).toEqual(['bearer', 'fake-token']);
   });
 });
