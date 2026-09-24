@@ -3,10 +3,10 @@ from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select  # type: ignore[import-not-found]
+from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
+from sqlalchemy.orm import selectinload  # type: ignore[import-not-found]
 
 from app.api.deps import (
     assert_object_access,
@@ -206,11 +206,11 @@ async def check_in(
             emb = face_service.get_face_embedding(img_b64)
             if emb is not None:
                 all_embeddings.append(emb)
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error processing image: {str(e)}",
-        )
+            detail="Invalid image payload",
+        ) from None
 
     if not all_embeddings:
         raise HTTPException(
@@ -385,11 +385,11 @@ async def check_out(
             emb = face_service.get_face_embedding(img_b64)
             if emb is not None:
                 all_embeddings.append(emb)
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error processing image: {str(e)}",
-        )
+            detail="Invalid image payload",
+        ) from None
 
     if not all_embeddings:
         raise HTTPException(

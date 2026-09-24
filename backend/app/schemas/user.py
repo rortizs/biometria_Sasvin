@@ -1,9 +1,19 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, field_validator, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.user import UserRole
+
+
+INSTITUTIONAL_EMAIL_DOMAIN = "@miumg.edu.gt"
+MIN_PASSWORD_LENGTH = 8
+
+
+def validate_institutional_email(value: str) -> str:
+    if not value.endswith(INSTITUTIONAL_EMAIL_DOMAIN):
+        raise ValueError(f"Solo se aceptan correos institucionales {INSTITUTIONAL_EMAIL_DOMAIN}")
+    return value
 
 
 class UserBase(BaseModel):
@@ -13,15 +23,13 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(..., min_length=MIN_PASSWORD_LENGTH)
     employee_id: UUID | None = None
 
     @field_validator("email")
     @classmethod
     def validate_umg_email(cls, v: str) -> str:
-        if not v.endswith("@miumg.edu.gt"):
-            raise ValueError("Solo se aceptan correos institucionales @miumg.edu.gt")
-        return v
+        return validate_institutional_email(v)
 
 
 class UserUpdate(BaseModel):
@@ -30,9 +38,14 @@ class UserUpdate(BaseModel):
     role: UserRole | None = None
     is_active: bool | None = None
 
+    @field_validator("email")
+    @classmethod
+    def validate_umg_email(cls, v: str | None) -> str | None:
+        return validate_institutional_email(v) if v is not None else v
+
 
 class UserPasswordChange(BaseModel):
-    new_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH)
 
 
 class UserResponse(UserBase):
@@ -73,7 +86,7 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type: str = Field(default="bearer")
 
 
 class TokenPayload(BaseModel):
@@ -83,4 +96,4 @@ class TokenPayload(BaseModel):
 
 
 class ChangeFirstPasswordRequest(BaseModel):
-    new_password: str = Field(..., min_length=8)
+    new_password: str = Field(..., min_length=MIN_PASSWORD_LENGTH)

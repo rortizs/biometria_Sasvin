@@ -1,9 +1,11 @@
-from pathlib import Path
-from types import SimpleNamespace
-from uuid import uuid4
+# pyright: reportArgumentType=false, reportOptionalMemberAccess=false
+# ruff: noqa: S105,S106
 import importlib.util
 import inspect
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -496,7 +498,7 @@ async def test_users_update_denies_dev_role_assignment_by_non_bootstrap_actor():
 
 @pytest.mark.asyncio
 async def test_users_update_denies_renaming_normal_user_to_reserved_bootstrap_email():
-    settings = _settings("Root@Example.com")
+    settings = _settings("Root@miumg.edu.gt")
     actor = _user("dean@example.com", UserRole.DECANO)
     target = _user("teacher@example.com", UserRole.CATEDRATICO)
     db = _mock_db(_db_result(value=target), _db_result(value=None))
@@ -506,7 +508,7 @@ async def test_users_update_denies_renaming_normal_user_to_reserved_bootstrap_em
             db,
             actor,
             target.id,
-            UserUpdate(email="root@example.com"),
+            UserUpdate(email="root@miumg.edu.gt"),
             settings,
         )
 

@@ -1,7 +1,7 @@
 from functools import lru_cache
 
-from pydantic_settings import BaseSettings  # pyright: ignore[reportMissingImports]
 from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings  # pyright: ignore[reportMissingImports]
 
 
 # Design.md D9: DIRECTOR is read-only (never an approver) and ADMINISTRATIVO
@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    login_throttle_max_attempts: int = 5
+    login_throttle_lock_seconds: int = 300
 
     # Bootstrap RBAC admin
     bootstrap_admin_email: str = "admin@sistemaslab.dev"
@@ -56,6 +58,19 @@ class Settings(BaseSettings):
 
     # Face Recognition
     face_recognition_threshold: float = 0.6
+    biometric_image_max_bytes: int = 5 * 1024 * 1024
+    biometric_image_max_width: int = 4096
+    biometric_image_max_height: int = 4096
+    biometric_image_max_pixels: int = 16_000_000
+    biometric_allowed_image_formats: str = "JPEG,PNG,WEBP"
+
+    @property
+    def biometric_allowed_image_formats_set(self) -> set[str]:
+        return {
+            item.strip().upper()
+            for item in self.biometric_allowed_image_formats.split(",")
+            if item.strip()
+        }
 
     # Email notifications (Resend). notification_service._send_email_notification
     # no-ops when resend_api_key is empty -- set all three via env vars to

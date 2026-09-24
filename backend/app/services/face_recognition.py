@@ -1,17 +1,17 @@
 import base64
+import binascii
 import io
-from typing import Tuple
+import warnings
+from typing import Any, cast
 
-import face_recognition
+import face_recognition  # type: ignore[import-not-found]
 import numpy as np
-from PIL import Image
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from PIL import Image, UnidentifiedImageError
+from sqlalchemy import select, text  # type: ignore[import-not-found]
+from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
 
 from app.core.config import get_settings
 from app.models.employee import Employee
-from app.models.face_embedding import FaceEmbedding
 
 settings = get_settings()
 
@@ -21,32 +21,63 @@ class FaceRecognitionService:
         self.threshold = threshold or settings.face_recognition_threshold
 
     def decode_base64_image(self, image_b64: str) -> np.ndarray:
-        """Decode a base64 image string to numpy array."""
-        # Remove data URL prefix if present
-        if "," in image_b64:
-            image_b64 = image_b64.split(",")[1]
+        """Decode and validate a base64 image string to a RGB numpy array."""
+        payload = image_b64.split(",", 1)[1] if "," in image_b64 else image_b64
 
-        image_data = base64.b64decode(image_b64)
-        image = Image.open(io.BytesIO(image_data))
+        try:
+            image_data = base64.b64decode(payload, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Invalid image payload") from exc
 
-        # Convert to RGB if necessary
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+        if len(image_data) > settings.biometric_image_max_bytes:
+            raise ValueError("Image payload exceeds maximum size")
 
-        return np.array(image)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", Image.DecompressionBombWarning)
+                with Image.open(io.BytesIO(image_data)) as image:
+                    image_format = (image.format or "").upper()
+                    allowed_formats = settings.biometric_allowed_image_formats_set
+                    if image_format not in allowed_formats:
+                        raise ValueError("Unsupported image format")
+
+                    width, height = image.size
+                    if (
+                        width <= 0
+                        or height <= 0
+                        or width > settings.biometric_image_max_width
+                        or height > settings.biometric_image_max_height
+                        or width * height > settings.biometric_image_max_pixels
+                    ):
+                        raise ValueError("Image dimensions exceed configured limit")
+
+                    image.verify()
+
+                with Image.open(io.BytesIO(image_data)) as image:
+                    if image.mode != "RGB":
+                        image = image.convert("RGB")
+                    return np.array(image)
+        except ValueError:
+            raise
+        except (Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+            raise ValueError("Image dimensions exceed configured limit") from exc
+        except (OSError, UnidentifiedImageError) as exc:
+            raise ValueError("Invalid image payload") from exc
 
     def get_face_embedding(self, image_b64: str) -> np.ndarray | None:
         """Extract face embedding from a base64 encoded image."""
         image_array = self.decode_base64_image(image_b64)
 
         # Find face locations
-        face_locations = face_recognition.face_locations(image_array)
+        face_locations_fn = cast(Any, face_recognition).face_locations
+        face_locations = face_locations_fn(image_array)
 
         if not face_locations:
             return None
 
         # Get face encodings (use first face found)
-        face_encodings = face_recognition.face_encodings(image_array, face_locations)
+        face_encodings_fn = cast(Any, face_recognition).face_encodings
+        face_encodings = face_encodings_fn(image_array, face_locations)
 
         if not face_encodings:
             return None
@@ -55,7 +86,7 @@ class FaceRecognitionService:
 
     async def find_best_match(
         self, db: AsyncSession, query_embedding: np.ndarray
-    ) -> Tuple[Employee, float] | None:
+    ) -> tuple[Employee, float] | None:
         """Find the best matching employee for a given face embedding."""
         # Convert numpy array to list for SQL query
         embedding_list = query_embedding.tolist()
@@ -105,16 +136,19 @@ class FaceRecognitionService:
 
     def compare_faces(
         self, known_embedding: np.ndarray, query_embedding: np.ndarray
-    ) -> Tuple[bool, float]:
+    ) -> tuple[bool, float]:
         """Compare two face embeddings and return match status and distance."""
         # Calculate Euclidean distance
         distance = np.linalg.norm(known_embedding - query_embedding)
 
         # face_recognition uses 0.6 as default threshold for Euclidean distance
-        is_match = distance <= self.threshold
+        is_match = bool(distance <= self.threshold)
 
         # Convert to confidence score (inverse of distance, normalized)
-        confidence = max(0, 1 - (distance / 1.0))
+        try:
+            confidence = float(max(0, 1 - (distance / 1.0)))
+        except (TypeError, ValueError):
+            confidence = 0.0
 
         return is_match, confidence
 
@@ -150,7 +184,10 @@ class FaceRecognitionService:
                 if norm_a == 0 or norm_b == 0:
                     continue
                 cosine_sim = np.dot(a, b) / (norm_a * norm_b)
-                cosine_dist = 1.0 - float(cosine_sim)
+                try:
+                    cosine_dist = 1.0 - float(cosine_sim)
+                except (TypeError, ValueError):
+                    continue
                 if cosine_dist > max_variance:
                     max_variance = cosine_dist
 

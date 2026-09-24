@@ -15,6 +15,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   backend:
     build: ./backend
@@ -22,14 +26,31 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL}
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://asistencia.sistemaslab.dev}
+      PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
       db:
         condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
 
   frontend:
     build: ./frontend
     depends_on:
       - backend
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
 
 volumes:
   postgres_data:
