@@ -39,9 +39,9 @@ export class WebSocketNotificationService {
 
   private openSocket(token: string): void {
     const wsBase = environment.apiUrl.replace(/^http/, 'ws');
-    const url = `${wsBase}/ws/notifications?token=${token}`;
+    const url = `${wsBase}/ws/notifications`;
 
-    this.socket = new WebSocket(url);
+    this.socket = new WebSocket(url, ['bearer', token]);
 
     this.socket.onopen = () => {
       this.retryCount = 0;
