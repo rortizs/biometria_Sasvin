@@ -1,0 +1,52 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Version control / local agent state
+.git/
+.claude/
+.engram/
+.opencode/
+.agents/
+.cursor/
+.continue/
+.windsurf/
+.aider*
+.atl/
+.pi/
+CLAUDE.md
+AGENTS.md
+*.prompt
+*.prompts
+
+# Python caches/build output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# OS/editor/logs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.log
+logs/

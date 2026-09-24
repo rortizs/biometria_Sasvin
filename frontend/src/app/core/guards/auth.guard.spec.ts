@@ -123,6 +123,15 @@ describe('auth.guard', () => {
       expect(navigateSpy).toHaveBeenCalledWith(['/requests']);
     });
 
+    it('fails closed when permission metadata is missing', () => {
+      const { router } = setupWithUser(buildUser('COORDINADOR'), ['user_scopes.manage']);
+      const navigateSpy = spyOn(router, 'navigate');
+      const route = routeWithPermission(undefined);
+      const result = TestBed.runInInjectionContext(() => permissionGuard(route, {} as never));
+      expect(result).toBe(false);
+      expect(navigateSpy).toHaveBeenCalledWith(['/requests']);
+    });
+
     it('redirects an unauthenticated request to /auth/login', () => {
       const { router } = setupWithUser(null);
       const navigateSpy = spyOn(router, 'navigate');

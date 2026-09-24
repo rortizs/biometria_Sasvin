@@ -1,3 +1,4 @@
+from time import monotonic
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -31,6 +32,40 @@ from app.schemas.user import (
 
 router = APIRouter()
 
+GENERIC_AUTH_ERROR = "Incorrect email or password"
+_login_failures: dict[str, tuple[int, float]] = {}
+
+
+def _throttle_key(username: str) -> str:
+    return username.strip().casefold()
+
+
+def _is_login_throttled(username: str) -> bool:
+    attempts, locked_until = _login_failures.get(_throttle_key(username), (0, 0.0))
+    now = monotonic()
+    if locked_until > now:
+        return True
+    if locked_until:
+        _login_failures.pop(_throttle_key(username), None)
+        return False
+    return attempts >= settings.login_throttle_max_attempts
+
+
+def _record_failed_login(username: str) -> None:
+    key = _throttle_key(username)
+    attempts, locked_until = _login_failures.get(key, (0, 0.0))
+    now = monotonic()
+    if locked_until <= now:
+        attempts += 1
+        locked_until = 0.0
+    if attempts >= settings.login_throttle_max_attempts:
+        locked_until = now + settings.login_throttle_lock_seconds
+    _login_failures[key] = (attempts, locked_until)
+
+
+def _clear_failed_login(username: str) -> None:
+    _login_failures.pop(_throttle_key(username), None)
+
 
 @router.post(
     "/login",
@@ -38,7 +73,7 @@ router = APIRouter()
     tags=["auth"],
     responses={
         401: {"description": "Email o contraseña incorrectos"},
-        403: {"description": "Usuario inactivo — cuenta deshabilitada"},
+        429: {"description": "Demasiados intentos de login"},
     },
 )
 async def login(
@@ -58,25 +93,36 @@ async def login(
     - `access_token` — válido por 30 minutos. Usar en el header `Authorization: Bearer <token>`
     - `refresh_token` — válido por 7 días. Usar en `POST /refresh` para renovar el access token
     """
+    if _is_login_throttled(form_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=GENERIC_AUTH_ERROR,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
+        _record_failed_login(form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail=GENERIC_AUTH_ERROR,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not user.is_active:
+        _record_failed_login(form_data.username)
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=GENERIC_AUTH_ERROR,
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
+    _clear_failed_login(form_data.username)
     return Token(
         access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
+        refresh_token=create_refresh_token(str(user.id), user.refresh_token_version),
     )
 
 
@@ -185,15 +231,19 @@ async def refresh_token(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_active:
+    token_version = payload.get("rv")
+    if not user or not user.is_active or token_version != user.refresh_token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
         )
 
+    user.refresh_token_version += 1
+    await db.commit()
+
     return Token(
         access_token=create_access_token(str(user.id)),
-        refresh_token=create_refresh_token(str(user.id)),
+        refresh_token=create_refresh_token(str(user.id), user.refresh_token_version),
     )
 
 
@@ -238,4 +288,5 @@ async def change_first_password(
     """Self-service: change password on first login. Resets must_change_password flag."""
     current_user.hashed_password = get_password_hash(payload.new_password)
     current_user.must_change_password = False
+    current_user.refresh_token_version += 1
     await db.commit()

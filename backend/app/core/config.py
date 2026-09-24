@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings
-from pydantic import field_validator
 from functools import lru_cache
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings  # pyright: ignore[reportMissingImports]
 
 
 # Design.md D9: DIRECTOR is read-only (never an approver) and ADMINISTRATIVO
@@ -19,16 +20,30 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://biometria:biometria_secret@localhost:5432/biometria_db"
 
     # Security
-    secret_key: str = "your-secret-key-change-in-production"
+    secret_key: str = Field(default="", validate_default=True)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    login_throttle_max_attempts: int = 5
+    login_throttle_lock_seconds: int = 300
 
     # Bootstrap RBAC admin
     bootstrap_admin_email: str = "admin@sistemaslab.dev"
     bootstrap_admin_full_name: str = "System Administrator"
     bootstrap_admin_password: str = ""
     legacy_admin_fallback_role: str = "DECANO"
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, value: str) -> str:
+        normalized = value.strip()
+        if (
+            not normalized
+            or normalized == "your-secret-key-change-in-production"
+            or len(normalized) < 32
+        ):
+            raise ValueError("SECRET_KEY must be set to a non-default value with at least 32 characters")
+        return normalized
 
     @field_validator("legacy_admin_fallback_role")
     @classmethod
@@ -43,6 +58,19 @@ class Settings(BaseSettings):
 
     # Face Recognition
     face_recognition_threshold: float = 0.6
+    biometric_image_max_bytes: int = 5 * 1024 * 1024
+    biometric_image_max_width: int = 4096
+    biometric_image_max_height: int = 4096
+    biometric_image_max_pixels: int = 16_000_000
+    biometric_allowed_image_formats: str = "JPEG,PNG,WEBP"
+
+    @property
+    def biometric_allowed_image_formats_set(self) -> set[str]:
+        return {
+            item.strip().upper()
+            for item in self.biometric_allowed_image_formats.split(",")
+            if item.strip()
+        }
 
     # Email notifications (Resend). notification_service._send_email_notification
     # no-ops when resend_api_key is empty -- set all three via env vars to
