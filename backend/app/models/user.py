@@ -1,12 +1,25 @@
-import uuid
-import enum
-from datetime import datetime
+from __future__ import annotations
 
-from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+import enum
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import (  # type: ignore[import-not-found]
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+)
+from sqlalchemy.dialects.postgresql import UUID  # type: ignore[import-not-found]
+from sqlalchemy.orm import Mapped, mapped_column, relationship  # type: ignore[import-not-found]
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.role_permission import UserRoleAssignment
 
 
 class UserRole(str, enum.Enum):
@@ -27,12 +40,12 @@ class UserRole(str, enum.Enum):
     PADRES = "PADRES"
 
     # Legacy attribute aliases used by existing endpoints/schemas.
-    admin = "ADMIN"
-    director = "DIRECTOR"
-    administrativo = "ADMINISTRATIVO"
-    coordinador = "COORDINADOR"
-    secretaria = "SECRETARIA"
-    catedratico = "CATEDRATICO"
+    admin = "ADMIN"  # noqa: PIE796
+    director = "DIRECTOR"  # noqa: PIE796
+    administrativo = "ADMINISTRATIVO"  # noqa: PIE796
+    coordinador = "COORDINADOR"  # noqa: PIE796
+    secretaria = "SECRETARIA"  # noqa: PIE796
+    catedratico = "CATEDRATICO"  # noqa: PIE796
 
 
 CANONICAL_ROLE_VALUES = tuple(role.value for role in UserRole)
@@ -77,9 +90,13 @@ def canonical_role_from_value(
         return UserRole(uppercase)
 
     legacy = normalized.lower()
-    if legacy == "admin" and user_email and bootstrap_admin_email:
-        if user_email.casefold() != bootstrap_admin_email.casefold():
-            return canonical_role_from_value(legacy_admin_fallback_role)
+    if (
+        legacy == "admin"
+        and user_email
+        and bootstrap_admin_email
+        and user_email.casefold() != bootstrap_admin_email.casefold()
+    ):
+        return canonical_role_from_value(legacy_admin_fallback_role)
 
     mapped = LEGACY_ROLE_MAPPING.get(legacy)
     return UserRole(mapped) if mapped else None
@@ -101,6 +118,7 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    refresh_token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     employee_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("employees.id", ondelete="SET NULL"),
@@ -112,7 +130,7 @@ class User(Base):
     )
 
     # Relationships (RBAC many-to-many via UserRoleAssignment)
-    user_roles: Mapped[list["UserRoleAssignment"]] = relationship(
+    user_roles: Mapped[list[UserRoleAssignment]] = relationship(
         "UserRoleAssignment",
         foreign_keys="[UserRoleAssignment.user_id]",
         back_populates="user",

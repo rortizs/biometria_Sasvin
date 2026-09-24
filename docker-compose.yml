@@ -12,6 +12,15 @@ services:
     networks:
       - biometria-network
       - dokploy-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
     deploy:
       resources:
         limits:
@@ -25,11 +34,11 @@ services:
       - traefik.http.routers.biometria-frontend-web.entrypoints=web
       - traefik.http.routers.biometria-frontend-web.middlewares=redirect-to-https@file
       - traefik.http.routers.biometria-frontend-web.service=biometria-frontend-web
-      - traefik.http.services.biometria-frontend-web.loadbalancer.server.port=80
+      - traefik.http.services.biometria-frontend-web.loadbalancer.server.port=8080
       - "traefik.http.routers.biometria-frontend-websecure.rule=Host(`asistencia.sistemaslab.dev`)"
       - traefik.http.routers.biometria-frontend-websecure.entrypoints=websecure
       - traefik.http.routers.biometria-frontend-websecure.service=biometria-frontend-websecure
-      - traefik.http.services.biometria-frontend-websecure.loadbalancer.server.port=80
+      - traefik.http.services.biometria-frontend-websecure.loadbalancer.server.port=8080
       - traefik.http.routers.biometria-frontend-websecure.tls.certresolver=letsencrypt
   db:
     image: pgvector/pgvector:pg16
@@ -52,6 +61,10 @@ services:
     restart: unless-stopped
     networks:
       - biometria-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -67,6 +80,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL}
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://asistencia.sistemaslab.dev}
+      PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
       db:
         condition: service_healthy
@@ -75,6 +89,13 @@ services:
       - biometria-network
       - dokploy-network
       - default
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     deploy:
       resources:
         limits:
