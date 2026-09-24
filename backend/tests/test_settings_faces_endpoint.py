@@ -14,12 +14,8 @@ needed.
 dependency at all (same pre-existing gap already closed for departments/
 positions/locations/schedules) -- this closes it with `get_current_user`.
 
-`verify_face` (`POST /faces/verify`) is intentionally left unauthenticated
--- it is the kiosk/check-in-flow identification endpoint consumed by
-`frontend/.../attendance.service.ts#verifyFace`, documented in its own
-docstring as "No requiere autenticación", and never used
-`get_current_active_admin`. A dedicated test locks in that it stays
-untouched.
+`verify_face` (`POST /faces/verify`) now requires authentication so it cannot be
+used as an anonymous identity lookup endpoint.
 
 Route-wiring is verified structurally (inspecting `route.dependant`) since
 FastAPI resolves `Depends(...)` before the endpoint body runs. Gate
@@ -28,14 +24,15 @@ allow/deny behavior is verified directly against `require_permission(...)`.
 
 import inspect
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException
 
 from app.api import deps
 from app.api.deps import require_permission
-from app.api.v1.endpoints import settings as settings_endpoint
 from app.api.v1.endpoints import faces as faces_endpoint
+from app.api.v1.endpoints import settings as settings_endpoint
 
 
 def _route(router, path: str, method: str):
@@ -65,12 +62,10 @@ def test_get_settings_now_requires_authentication():
     assert deps.get_current_user in _dependency_calls(route)
 
 
-def test_verify_face_stays_unauthenticated():
-    # Kiosk/check-in identification endpoint -- deliberately public, must
-    # not gain an auth dependency as a side effect of this slice.
+def test_verify_face_requires_authentication():
     route = _route(faces_endpoint.router, "/verify", "POST")
     calls = _dependency_calls(route)
-    assert deps.get_current_user not in calls
+    assert deps.get_current_user in calls
     assert deps.get_current_active_admin not in calls
     assert not _route_permission_codes(route)
 
@@ -135,7 +130,7 @@ async def test_write_gate_denies_business_top_role_without_grant(role_name, code
     # settings/faces. Neither role has a seeded `role_permissions` row for
     # these codes, so `require_permission` denies them by construction.
     gate = require_permission(code)
-    actor = _user(role_name, [])
+    actor = cast(Any, _user(role_name, []))
 
     with pytest.raises(HTTPException) as exc_info:
         await gate(actor)
@@ -146,6 +141,6 @@ async def test_write_gate_denies_business_top_role_without_grant(role_name, code
 @pytest.mark.parametrize("code", ["settings.update", "faces.create", "faces.delete"])
 async def test_write_gate_allows_actor_with_explicit_grant(code):
     gate = require_permission(code)
-    actor = _user("ADMIN", [code])
+    actor = cast(Any, _user("ADMIN", [code]))
 
     assert await gate(actor) is actor

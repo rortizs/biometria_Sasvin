@@ -6,11 +6,11 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select  # type: ignore[import-not-found]
+from sqlalchemy.exc import SQLAlchemyError  # type: ignore[import-not-found]
+from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
 
-from app.api.deps import get_db, require_permission
+from app.api.deps import get_current_user, get_db, require_permission
 from app.models.biometric_face_session import BiometricFaceSession
 from app.models.employee import Employee
 from app.models.face_embedding import FaceEmbedding
@@ -138,7 +138,7 @@ async def register_face(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Error processing image {idx + 1}: {str(e)}",
-                )
+                ) from e
 
         if not embeddings:
             raise HTTPException(
@@ -240,28 +240,28 @@ async def register_face(
 )
 async def verify_face(
     db: Annotated[AsyncSession, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
     request: FaceVerifyRequest,
 ) -> FaceVerifyResponse:
     """
-    Verificar a qué empleado pertenece un rostro. No requiere autenticación.
+    Verificar a qué empleado pertenece un rostro. Requiere autenticación.
 
     A diferencia de check-in/check-out, este endpoint **no registra asistencia** —
-    solo identifica al empleado y devuelve su nombre y nivel de confianza.
-    Útil para diagnóstico y pruebas del sistema de reconocimiento facial.
+    solo identifica al empleado y devuelve su nivel de confianza.
 
     **Respuesta:** Siempre devuelve 200. El campo `success` indica si hubo match:
-    - `success: true` → empleado identificado, incluye `employee_id`, `employee_name` y `confidence`
-    - `success: false` → sin match o imagen inválida, incluye `message` con el motivo
+    - `success: true` → empleado identificado para un actor autenticado
+    - `success: false` → sin match o imagen inválida, con mensaje genérico
     """
     face_service = FaceRecognitionService()
 
     # Get embedding from provided image
     try:
         query_embedding = face_service.get_face_embedding(request.image)
-    except Exception as e:
+    except Exception:
         return FaceVerifyResponse(
             success=False,
-            message=f"Error processing image: {str(e)}",
+            message="Invalid image payload",
         )
 
     if query_embedding is None:
@@ -286,7 +286,7 @@ async def verify_face(
         employee_id=employee.id,
         employee_name=employee.full_name,
         confidence=confidence,
-        message=f"Welcome, {employee.full_name}!",
+        message="Face verified",
     )
 
 
