@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings
-from pydantic import field_validator
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings  # pyright: ignore[reportMissingImports]
+from pydantic import Field, field_validator
 
 
 # Design.md D9: DIRECTOR is read-only (never an approver) and ADMINISTRATIVO
@@ -19,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://biometria:biometria_secret@localhost:5432/biometria_db"
 
     # Security
-    secret_key: str = "your-secret-key-change-in-production"
+    secret_key: str = Field(default="", validate_default=True)
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
@@ -29,6 +30,18 @@ class Settings(BaseSettings):
     bootstrap_admin_full_name: str = "System Administrator"
     bootstrap_admin_password: str = ""
     legacy_admin_fallback_role: str = "DECANO"
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, value: str) -> str:
+        normalized = value.strip()
+        if (
+            not normalized
+            or normalized == "your-secret-key-change-in-production"
+            or len(normalized) < 32
+        ):
+            raise ValueError("SECRET_KEY must be set to a non-default value with at least 32 characters")
+        return normalized
 
     @field_validator("legacy_admin_fallback_role")
     @classmethod
