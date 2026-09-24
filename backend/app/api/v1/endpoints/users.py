@@ -2,8 +2,8 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select  # type: ignore[import-not-found]
+from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-not-found]
 
 from app.api.deps import (
     ensure_can_assign_role,
@@ -14,7 +14,7 @@ from app.api.deps import (
 )
 from app.core.security import get_password_hash
 from app.models.user import User
-from app.schemas.user import UserResponse, UserUpdate, UserPasswordChange
+from app.schemas.user import UserPasswordChange, UserResponse, UserUpdate
 
 router = APIRouter()
 
@@ -163,4 +163,5 @@ async def change_user_password(
     protect_bootstrap_admin_mutation(user, current_user, configured_settings)
     user.hashed_password = get_password_hash(payload.new_password)
     user.must_change_password = False
+    user.refresh_token_version += 1
     await db.commit()
