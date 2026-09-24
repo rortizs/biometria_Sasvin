@@ -1,4 +1,3 @@
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Annotated
 
@@ -13,7 +12,12 @@ from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.role import Role
 from app.models.role_permission import UserRoleAssignment
-from app.models.user import ASSIGNABLE_ROLE_VALUES, User, UserRole, canonical_role_from_value
+from app.models.user import (
+    ASSIGNABLE_ROLE_VALUES,
+    User,
+    UserRole,
+    canonical_role_from_value,
+)
 from app.models.user_scope_assignment import UserScopeAssignment
 
 settings = get_settings()
@@ -134,6 +138,11 @@ def ensure_can_assign_role(user: User, target_role: str | UserRole, configured_s
     if canonical == UserRole.DEV and not is_bootstrap_admin(user, configured_settings):
         raise _permission_denied()
     if canonical is None or canonical.value not in ASSIGNABLE_ROLE_VALUES:
+        raise _permission_denied()
+
+
+def ensure_can_mutate_role_definition(role_name: str | UserRole) -> None:
+    if canonical_role_from_value(role_name) is not None:
         raise _permission_denied()
 
 
