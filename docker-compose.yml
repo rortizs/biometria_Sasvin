@@ -12,6 +12,15 @@ services:
     networks:
       - biometria-network
       - dokploy-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
     deploy:
       resources:
         limits:
@@ -25,18 +34,18 @@ services:
       - traefik.http.routers.biometria-frontend-web.entrypoints=web
       - traefik.http.routers.biometria-frontend-web.middlewares=redirect-to-https@file
       - traefik.http.routers.biometria-frontend-web.service=biometria-frontend-web
-      - traefik.http.services.biometria-frontend-web.loadbalancer.server.port=80
+      - traefik.http.services.biometria-frontend-web.loadbalancer.server.port=8080
       - "traefik.http.routers.biometria-frontend-websecure.rule=Host(`asistencia.sistemaslab.dev`)"
       - traefik.http.routers.biometria-frontend-websecure.entrypoints=websecure
       - traefik.http.routers.biometria-frontend-websecure.service=biometria-frontend-websecure
-      - traefik.http.services.biometria-frontend-websecure.loadbalancer.server.port=80
+      - traefik.http.services.biometria-frontend-websecure.loadbalancer.server.port=8080
       - traefik.http.routers.biometria-frontend-websecure.tls.certresolver=letsencrypt
   db:
     image: pgvector/pgvector:pg16
     container_name: biometria_db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-biometria}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-biometria_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-biometria_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -44,13 +53,18 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U ${POSTGRES_USER:-biometria} -d ${POSTGRES_DB:-biometria_db}
+        - >
+          pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
       - biometria-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -63,9 +77,10 @@ services:
       dockerfile: Dockerfile
     container_name: biometria_api
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-biometria}:${POSTGRES_PASSWORD:-biometria_secret}@db:5432/${POSTGRES_DB:-biometria_db}
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://asistencia.sistemaslab.dev}
+      PYTHONDONTWRITEBYTECODE: "1"
     depends_on:
       db:
         condition: service_healthy
@@ -74,6 +89,13 @@ services:
       - biometria-network
       - dokploy-network
       - default
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     deploy:
       resources:
         limits:

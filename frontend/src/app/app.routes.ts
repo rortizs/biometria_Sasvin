@@ -49,6 +49,8 @@ export const routes: Routes = [
       },
       {
         path: 'dashboard',
+        canActivate: [permissionGuard],
+        data: { permission: 'dashboard.view' },
         loadComponent: () =>
           import('./features/admin/pages/dashboard/dashboard.component').then(
             (m) => m.DashboardComponent
@@ -56,6 +58,8 @@ export const routes: Routes = [
       },
       {
         path: 'employees',
+        canActivate: [permissionGuard],
+        data: { permission: 'employees.view' },
         loadComponent: () =>
           import('./features/admin/pages/employees/employees.component').then(
             (m) => m.EmployeesComponent
@@ -63,6 +67,8 @@ export const routes: Routes = [
       },
       {
         path: 'attendance',
+        canActivate: [permissionGuard],
+        data: { permission: 'attendance.view' },
         loadComponent: () =>
           import('./features/admin/pages/attendance/attendance.component').then(
             (m) => m.AttendanceComponent
@@ -70,6 +76,8 @@ export const routes: Routes = [
       },
       {
         path: 'settings',
+        canActivate: [permissionGuard],
+        data: { permission: 'settings.view' },
         loadComponent: () =>
           import('./features/admin/pages/settings/settings.component').then(
             (m) => m.SettingsComponent
@@ -77,6 +85,8 @@ export const routes: Routes = [
       },
       {
         path: 'locations',
+        canActivate: [permissionGuard],
+        data: { permission: 'locations.view' },
         loadComponent: () =>
           import('./features/admin/pages/locations/locations.component').then(
             (m) => m.LocationsComponent
@@ -84,6 +94,8 @@ export const routes: Routes = [
       },
       {
         path: 'schedules',
+        canActivate: [permissionGuard],
+        data: { permission: 'schedules.view' },
         loadComponent: () =>
           import('./features/admin/pages/schedules/schedules.component').then(
             (m) => m.SchedulesComponent
@@ -91,6 +103,8 @@ export const routes: Routes = [
       },
       {
         path: 'departments',
+        canActivate: [permissionGuard],
+        data: { permission: 'departments.view' },
         loadComponent: () =>
           import('./features/admin/pages/departments/departments.component').then(
             (m) => m.DepartmentsComponent
@@ -98,6 +112,8 @@ export const routes: Routes = [
       },
       {
         path: 'positions',
+        canActivate: [permissionGuard],
+        data: { permission: 'positions.view' },
         loadComponent: () =>
           import('./features/admin/pages/positions/positions.component').then(
             (m) => m.PositionsComponent
@@ -105,6 +121,8 @@ export const routes: Routes = [
       },
       {
         path: 'permission-requests',
+        canActivate: [permissionGuard],
+        data: { permission: 'permission_requests.view' },
         loadComponent: () =>
           import('./features/admin/pages/permission-requests/permission-requests.component').then(
             (m) => m.AdminPermissionRequestsComponent
@@ -112,11 +130,15 @@ export const routes: Routes = [
       },
       {
         path: 'roles',
+        canActivate: [permissionGuard],
+        data: { permission: 'roles.view' },
         loadComponent: () =>
           import('./features/admin/pages/roles/roles.component').then((m) => m.RolesComponent),
       },
       {
         path: 'users',
+        canActivate: [permissionGuard],
+        data: { permission: 'users.view' },
         loadComponent: () =>
           import('./features/admin/pages/users/users.component').then((m) => m.UsersComponent),
       },

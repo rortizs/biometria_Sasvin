@@ -9,28 +9,36 @@ Tests cover:
 - Error responses (400, 404, 422)
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+import base64
+import io
 from datetime import date, datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from PIL import Image
+import pytest
 from app.api.v1.endpoints.attendance import (
     check_in,
     check_out,
     list_attendance,
     list_today_attendance,
 )
-from app.schemas.attendance import AttendanceCheckIn, AttendanceCheckOut
+from app.models.attendance import AttendanceRecord
 from app.models.employee import Employee
 from app.models.location import Location
-from app.models.attendance import AttendanceRecord
+from app.schemas.attendance import AttendanceCheckIn, AttendanceCheckOut
 
 
 THREE_IMAGES = ["base64img1", "base64img2", "base64img3"]
 THREE_NO_FACE_IMAGES = ["base64img_no_face1", "base64img_no_face2", "base64img_no_face3"]
+
+
+def _image_b64(*, size=(1, 1), image_format="PNG") -> str:
+    image = Image.new("RGB", size, color=(255, 255, 255))
+    buf = io.BytesIO()
+    image.save(buf, format=image_format)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def allow_liveness(mock_face_service, variance: float = 0.01):
@@ -72,7 +80,7 @@ def mock_db_execute_scalars_all(records: list):
 @pytest.fixture
 def mock_db():
     """Create mock async database session."""
-    mock = AsyncMock(spec=AsyncSession)
+    mock = AsyncMock()
 
     # Mock common db methods
     mock.add = MagicMock()
@@ -223,7 +231,7 @@ class TestCheckInEndpoint:
 
     @pytest.mark.asyncio
     async def test_reject_image_processing_error(self, mock_db):
-        """Should return 400 if image processing fails."""
+        """Should return 400 if image processing fails without exposing internals."""
         # Arrange
         request = AttendanceCheckIn(
             images=THREE_IMAGES,
@@ -241,7 +249,31 @@ class TestCheckInEndpoint:
                 await check_in(mock_db, request)
 
             assert exc_info.value.status_code == 400
-            assert "Error processing image" in exc_info.value.detail
+            assert exc_info.value.detail == "Invalid image payload"
+
+    @pytest.mark.asyncio
+    async def test_reject_malformed_image_before_database_work(self, mock_db):
+        """Should reject malformed image payloads before DB or recognition lookup."""
+        request = AttendanceCheckIn(images=["not-valid-base64!!!"] * 3)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await check_in(mock_db, request)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid image payload"
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_reject_oversized_image_dimensions_before_database_work(self, mock_db):
+        """Should reject oversized images before DB or recognition lookup."""
+        request = AttendanceCheckIn(images=[_image_b64(size=(5001, 1))] * 3)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await check_in(mock_db, request)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid image payload"
+        mock_db.execute.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_checkin_without_gps_coordinates_is_rejected(
@@ -347,6 +379,7 @@ class TestCheckInEndpoint:
             response = await check_in(mock_db, request)
 
             # Assert
+            assert response.message is not None
             assert "Already checked in" in response.message
             assert response.check_in == mock_attendance_record.check_in
 
@@ -428,6 +461,18 @@ class TestCheckOutEndpoint:
             mock_face_service.get_face_embedding.assert_any_call("base64img1")
 
     @pytest.mark.asyncio
+    async def test_reject_checkout_malformed_image_before_database_work(self, mock_db):
+        """Should reject malformed check-out image payloads before DB lookup."""
+        request = AttendanceCheckOut(images=["not-valid-base64!!!"] * 3)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await check_out(mock_db, request)
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Invalid image payload"
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_reject_checkout_without_checkin(
         self, mock_db, mock_employee, mock_location
     ):
@@ -493,6 +538,7 @@ class TestCheckOutEndpoint:
             response = await check_out(mock_db, request)
 
             # Assert
+            assert response.message is not None
             assert "Already checked out" in response.message
             assert response.check_out == mock_attendance_record.check_out
 

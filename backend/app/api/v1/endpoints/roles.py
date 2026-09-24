@@ -8,15 +8,16 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import (
     ensure_can_assign_role,
+    ensure_can_mutate_role_definition,
     get_db,
     get_current_technical_rbac_admin,
     protect_bootstrap_admin_mutation,
     settings,
 )
-from app.models.role import Role
 from app.models.permission import Permission
+from app.models.role import Role
 from app.models.role_permission import UserRoleAssignment
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.role import (
     RoleCreate,
     RoleUpdate,
@@ -55,7 +56,7 @@ async def list_roles(
     await get_current_technical_rbac_admin(current_user, configured_settings)
     query = select(Role)
     if active_only:
-        query = query.where(Role.is_active == True)
+        query = query.where(Role.is_active.is_(True))
     result = await db.execute(query.order_by(Role.name))
     return result.scalars().all()
 
@@ -112,6 +113,7 @@ async def update_role(
 ) -> Role:
     await get_current_technical_rbac_admin(current_user, configured_settings)
     role = await _get_role_or_404(db, role_id)
+    ensure_can_mutate_role_definition(role.name)
     if role_in.name is not None:
         ensure_can_assign_role(current_user, role_in.name, configured_settings)
 
@@ -133,6 +135,7 @@ async def delete_role(
 ) -> None:
     await get_current_technical_rbac_admin(current_user, configured_settings)
     role = await _get_role_or_404(db, role_id)
+    ensure_can_mutate_role_definition(role.name)
     await db.delete(role)
     await db.commit()
 
@@ -147,6 +150,7 @@ async def set_role_permissions(
 ) -> Role:
     await get_current_technical_rbac_admin(current_user, configured_settings)
     role = await _get_role_or_404(db, role_id)
+    ensure_can_mutate_role_definition(role.name)
 
     perms = await db.execute(
         select(Permission).where(Permission.id.in_(permission_ids))

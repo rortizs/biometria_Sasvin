@@ -81,7 +81,7 @@ export const permissionGuard: CanActivateFn = (route) => {
   }
 
   const checkPermission = (): boolean => {
-    if (!requiredPermission || authService.hasPermission(requiredPermission)) return true;
+    if (requiredPermission && authService.hasPermission(requiredPermission)) return true;
     router.navigate(['/requests']);
     return false;
   };

@@ -13,12 +13,13 @@ ARG CACHEBUST=2
 COPY . .
 RUN npm run build -- --configuration production
 
-## Stage 2 — Serve with nginx
-FROM nginx:alpine
+## Stage 2 — Serve with unprivileged nginx
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 
 COPY --from=builder /app/dist/frontend/browser /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN nginx -t
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]
