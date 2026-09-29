@@ -14,7 +14,7 @@ COPY . .
 RUN npm run build -- --configuration production
 
 ## Stage 2 — Serve with unprivileged nginx
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.29-alpine
 
 COPY --from=builder /app/dist/frontend/browser /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
