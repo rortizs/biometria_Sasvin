@@ -17,26 +17,42 @@ export class ApiService {
         httpParams = httpParams.set(key, String(value));
       });
     }
-    return this.http.get<T>(`${this.baseUrl}${path}`, { params: httpParams });
+    return this.http.get<T>(this.buildUrl(path), { params: httpParams });
   }
 
   post<T>(path: string, body: unknown): Observable<T> {
-    return this.http.post<T>(`${this.baseUrl}${path}`, body);
+    return this.http.post<T>(this.buildUrl(path), body);
   }
 
   patch<T>(path: string, body: unknown): Observable<T> {
-    return this.http.patch<T>(`${this.baseUrl}${path}`, body);
+    return this.http.patch<T>(this.buildUrl(path), body);
   }
 
   put<T>(path: string, body: unknown): Observable<T> {
-    return this.http.put<T>(`${this.baseUrl}${path}`, body);
+    return this.http.put<T>(this.buildUrl(path), body);
   }
 
   delete<T>(path: string): Observable<T> {
-    return this.http.delete<T>(`${this.baseUrl}${path}`);
+    return this.http.delete<T>(this.buildUrl(path));
   }
 
   postForm<T>(path: string, formData: FormData): Observable<T> {
-    return this.http.post<T>(`${this.baseUrl}${path}`, formData);
+    return this.http.post<T>(this.buildUrl(path), formData);
+  }
+
+  private buildUrl(path: string): string {
+    return `${this.baseUrl}${this.canonicalizePath(path)}`;
+  }
+
+  private canonicalizePath(path: string): string {
+    const suffixIndex = path.search(/[?#]/);
+    const pathname = suffixIndex === -1 ? path : path.slice(0, suffixIndex);
+    const suffix = suffixIndex === -1 ? '' : path.slice(suffixIndex);
+
+    if (pathname.length > 1 && pathname.endsWith('/')) {
+      return `${pathname.slice(0, -1)}${suffix}`;
+    }
+
+    return path;
   }
 }
