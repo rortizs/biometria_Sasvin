@@ -35,6 +35,6 @@ setuptools>=70.0.0,<81.0.0  # Required for face_recognition_models pkg_resources
 
 # Testing
 pytest>=7.4.0
-pytest-asyncio>=0.23.0
+pytest-asyncio>=1.4.0
 httpx>=0.26.0
 aiosqlite>=0.20.0  # in-memory async SQLite engine for real-DB constraint tests
